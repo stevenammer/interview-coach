@@ -3,6 +3,7 @@ import { productionSql } from '../../src/db.js';
 import { GeminiAdapter } from '../../src/model.js';
 import { sessionToken } from '../../src/auth.js';
 import { runModelJob } from '../../src/jobs.js';
+import { readJsonObject } from '../../src/request-body.js';
 
 export function createBackgroundHandler({ repo, model }) {
   return async (request) => {
@@ -13,8 +14,8 @@ export function createBackgroundHandler({ repo, model }) {
     const user = token && await repo.session(hash(token));
     if (!user) return new Response(null, { status: 401 });
     let data;
-    try { data = await request.json(); } catch { return new Response(null, { status: 400 }); }
-    if (typeof data.jobId !== 'string') return new Response(null, { status: 400 });
+    try { data = await readJsonObject(request, 1024); } catch (error) { return new Response(null, { status: error.status ?? 400 }); }
+    if (typeof data.jobId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.jobId)) return new Response(null, { status: 400 });
     const started = await runModelJob(repo, model, user.id, data.jobId);
     return new Response(null, { status: started ? 200 : 404 });
   };

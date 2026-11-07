@@ -25,4 +25,10 @@ This is a side project run by one person. I'll answer when I can and I'll credit
 
 No third-party security audit. AI output is untrusted text; the app escapes it for display, but treat it carefully if you change the rendering code.
 
-Storage controls are incomplete. Pending-upload checks can race across simultaneous upload initializations, and completed files have no overall account or deployment storage quota. Exact chunk lengths bound each upload, but they don't cap cumulative storage. Use trusted accounts and monitor storage until those limits are enforced.
+Storage reservations are serialized with a database row lock. Pending and completed original files count toward a 100 MB account cap and 1 GB site cap (pending files also have a 20 MB account cap). File counts, source text, retained model-job payloads, and request rates have separate bounds in code. These checks require every migration, including `023_resource_guard.sql`, before serving traffic. They don't prove that a hosted blob store can never contain an orphan after a platform failure. Monitor storage and backups as the operator.
+
+The default production handler no longer persists personal Plain English rewrites in a shared blob cache. If upgrading an older deployment, remove its legacy `plain-cache` objects through your hosting account after checking retention needs; account deletion cannot enumerate that legacy shared cache. No automatic destructive hosting cleanup is included.
+
+Uncertain dispatched model/voice requests retain their spend reservation for the original UTC day until actual usage or a definitive no-charge outcome settles them. This can temporarily reduce available practice budget; retrying an uncertain request is not treated as free. Model rates are reviewed estimates and provider billing still needs an external account budget.
+
+Local regression tests and code review are not an independent security certification. CSP remains report-only pending a real Retell browser session. Live provider behavior, production database deployment, and hosted data cleanup require separate operator verification.

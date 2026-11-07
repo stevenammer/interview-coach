@@ -18,7 +18,7 @@ export function jobHuntCsv(workspaces) {
   // A cell that starts with = + - or @ can run as a formula when the file is opened in a spreadsheet.
   const quote = (value) => {
     const text = String(value ?? '');
-    return `"${(/^[=+\-@\t\r]/.test(text) ? `'${text}` : text).replaceAll('"', '""')}"`;
+    return `"${(/^[\s\uFEFF]*[=+\-@＝＋－＠]|^[\t\r\n]/.test(text) ? `'${text}` : text).replaceAll('"', '""')}"`;
   };
   const rows = [['company/job name', 'status', 'applied on', 'next step', 'next step date', 'interview date', 'notes'],
     ...workspaces.map((workspace) => [workspace.company_name || workspace.label, workspace.hunt_status || 'saved',

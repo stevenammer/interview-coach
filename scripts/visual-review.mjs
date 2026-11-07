@@ -3,7 +3,8 @@
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
-await mkdir('docs/screens', { recursive: true });
+const output = process.env.VISUAL_OUTPUT_DIR || 'docs/screens';
+await mkdir(output, { recursive: true });
 const browser = await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
 const errors=[];
 for (const [name,width,height] of [['phone',390,844],['desktop',1440,1000]]) {
@@ -43,21 +44,31 @@ for (const [name,width,height] of [['phone',390,844],['desktop',1440,1000]]) {
     }
     await route.fulfill({json:{result,state:{demo:true}}});
   });
+  const navigate=async route=>{
+    if (width < 900) await page.locator('#rail-toggle').click();
+    await page.locator(`#app-rail a[href="#/${route}"]`).click();
+  };
   const shot=async screen=>{
     await page.evaluate(()=>document.fonts.ready);
-    await page.waitForTimeout(400);
+    // Scroll naturally so IntersectionObserver reveals each below-the-fold card.
+    for (let y=0; y < await page.evaluate(()=>document.documentElement.scrollHeight); y+=height*.75) {
+      await page.evaluate(y=>scrollTo(0,y), y);
+      await page.waitForTimeout(80);
+    }
+    await page.evaluate(()=>scrollTo(0,0));
+    await page.waitForTimeout(650);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${screen} ${name} overflow`);
-    await page.screenshot({path:`docs/screens/${screen}-${name}.png`,fullPage:true});
+    await page.screenshot({path:`${output}/${screen}-${name}.png`,fullPage:true});
   };
   await page.goto('http://localhost:4173');
   await page.locator('#landing').waitFor({state:'visible'});
   await shot('landing');
-  await page.locator('#app-rail a[href="#/start"]').click();
+  await navigate('start');
   await page.getByRole('button',{name:'02 · Practice',exact:true}).click();
   await page.getByRole('heading',{name:'Put me in that moment.'}).waitFor();
   await page.keyboard.press('Tab');
   assert.ok(await page.evaluate(()=>document.activeElement.tagName==='BUTTON'));
-  await page.locator('#app-rail a[href="#/story"]').click();
+  await navigate('story');
   await page.locator('#try-guest').click();
   await shot('setup');
   await page.locator('#job-label').fill('Fictional Director of Operations');
@@ -87,11 +98,11 @@ for (const [name,width,height] of [['phone',390,844],['desktop',1440,1000]]) {
   await page.locator('#interview').waitFor({state:'visible'});
   await shot('interview');
   await page.locator('#answer').fill('I reassigned coverage at the front desk and checked with the team afterward.');
-  await page.locator('#answer-form button').click();
+  await page.locator('#answer-form button[type=submit]').click();
   await page.locator('#debrief').waitFor({state:'visible'});
   await shot('debrief');
   await page.locator('#review-proposals').click();
-  await page.locator('#app-rail a[href="#/drills"]').click();
+  await navigate('drills');
   await page.locator('#drills').waitFor({state:'visible'});
   await shot('practice');
   await page.getByRole('button',{name:'Flip to practice ↻'}).first().click();

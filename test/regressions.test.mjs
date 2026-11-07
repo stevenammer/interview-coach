@@ -8,7 +8,7 @@ import { CoachService } from '../src/service.js';
 
 const migrations = ['001_core.sql', '002_jobs.sql', '003_ingestion.sql', '004_workspaces.sql',
   '005_rewrites.sql', '006_interviewer.sql', '007_story_dig.sql', '008_drills.sql',
-  '009_real_interviews.sql', '010_fact_gate.sql', '011_immerser.sql', '012_voice.sql', '013_guest_voice.sql', '015_debrief_input_hash.sql', '016_job_comparison.sql', '021_security_hardening_3.sql', '022_fact_conflict_reviews.sql'];
+  '009_real_interviews.sql', '010_fact_gate.sql', '011_immerser.sql', '012_voice.sql', '013_guest_voice.sql', '015_debrief_input_hash.sql', '016_job_comparison.sql', '021_security_hardening_3.sql', '022_fact_conflict_reviews.sql', '023_resource_guard.sql'];
 async function fixture() {
   const db = new PGlite();
   for (const name of migrations) await db.exec(await readFile(new URL(`../netlify/database/migrations/${name}`, import.meta.url), 'utf8'));

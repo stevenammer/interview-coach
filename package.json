@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.22.0"
   },
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
@@ -27,6 +27,7 @@
     "esbuild": "^0.28.2",
     "fflate": "^0.8.3",
     "jszip": "^3.10.2",
+    "pg": "8.23.0",
     "retell-client-js-sdk": "3.0.2"
   },
   "description": "Open-source interview practice that only uses facts you confirm.",

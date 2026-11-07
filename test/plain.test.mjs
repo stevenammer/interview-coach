@@ -394,3 +394,19 @@ test('voice: a question the guard rejects (or no free model) is asked as origina
   assert.match(on.mode, /PLAIN ENGLISH INTERVIEWER IS ON/);
   assert.equal(on.question_plan, off.question_plan);
 });
+
+test('session clearing cancels queued translations and rejects late private cache writes', async () => {
+  const session = storage(), waiting = []; let dispatched = 0;
+  const plain = createPlainEnglish({ doc: fakeDoc(), session, local: storage(),
+    fetchPlain: async () => { dispatched++; return new Promise((resolve) => waiting.push(resolve)); } });
+  const first = plain.translate('Private question A', 'question');
+  const second = plain.translate('Private question B', 'question');
+  const queued = plain.translate('Private question C', 'question');
+  await settle();
+  assert.equal(dispatched, 2);
+  plain.clear();
+  for (const resolve of waiting) resolve({ text: 'Private translated response', source: 'model', glossary: [] });
+  await Promise.all([first, second, queued]);
+  assert.equal(dispatched, 2, 'queued data never leaves the old session');
+  assert.equal(session.map.size, 0, 'late provider results cannot repopulate a cleared browser cache');
+});

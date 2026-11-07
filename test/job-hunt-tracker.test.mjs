@@ -17,6 +17,7 @@ async function database() {
     if (name) await db.exec(await readFile(new URL(`../netlify/database/migrations/${name}`, import.meta.url), 'utf8'));
   }
   await db.exec(await readFile(new URL('../netlify/database/migrations/021_security_hardening_3.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../netlify/database/migrations/023_resource_guard.sql', import.meta.url), 'utf8'));
   return { db, repo: new Repository(pgliteSql(db)) };
 }
 
@@ -68,4 +69,11 @@ test('csv export neutralizes cells that would run as spreadsheet formulas', () =
   const csv = jobHuntCsv([{ label: '=HYPERLINK("http://x")', hunt_status: 'saved', hunt_notes: '+1 call' }]);
   assert.match(csv, /"'=HYPERLINK\(""http:\/\/x""\)"/);
   assert.match(csv, /"'\+1 call"/);
+});
+
+test('CSV export also treats leading line breaks, whitespace and full-width formula prefixes as text', () => {
+  for (const label of ['\n=1+1', '  =1+1', '\uFEFF@SUM(1)', '＝1+1', '＋1', '－1', '＠SUM(1)']) {
+    const csv = jobHuntCsv([{ label, hunt_status: 'saved' }]);
+    assert.ok(csv.includes(`"'${label.replaceAll('"', '""')}"`));
+  }
 });

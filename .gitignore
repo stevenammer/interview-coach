@@ -10,3 +10,7 @@ data/
 .DS_Store
 # Local Retell agent state written by scripts/retell/create-agent.mjs
 scripts/retell/agent.json
+
+# Personal agent command approvals can retain embedded credentials.
+**/.claude/settings.local.json
+**/.claude/settings.local.json.*

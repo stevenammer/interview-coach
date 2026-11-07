@@ -55,7 +55,7 @@ const model = { async generate(task, prompt, schema) {
     contentScores: Object.fromEntries(['relevance', 'ownership', 'evidence', 'outcome', 'structure']
       .map((key) => [key, { score: 3, reason: `Your ${key} came through in the answer.` }])),
     deliveryScores: { clarity: { score: 4, reason: 'Easy to follow.' }, concision: { score: 4, reason: 'Right length.' } },
-    feedback: 'You answered the question well and your example was specific. Next time, add one number that shows the result.',
+    feedback: 'You explained your staffing decision clearly. Next time: add one number that shows the result.',
     unsupportedClaims: [], rewriteClaims: [], strongerNeeds: [] };
   else if (task === 'immerse_week') data = { scenes: days.map((day, index) => ({
     id: day.toLowerCase(), day, title: `${day} on the job`,
@@ -96,6 +96,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } }); // phone
 const page = await context.newPage();
+await page.addInitScript(() => { window.confirm = () => true; });
 let voiceStartRequests = 0;
 const heldApiOps = new Map();
 page.on('request', (request) => {
@@ -127,6 +128,10 @@ const toggle = page.locator('#plain-toggle');
 const flip = async () => { const toast = page.locator('#message:not([hidden])');
   if (await toast.count()) await toast.click({ position: { x: 5, y: 5 } }).catch(() => {});
   await toggle.click(); };
+const openPracticeRail = async () => {
+  if (await page.evaluate(() => innerWidth < 900) && await page.locator('#rail-toggle').getAttribute('aria-expanded') !== 'true') await page.locator('#rail-toggle').click();
+  await page.locator('#app-rail a[href="#/practice"]').click();
+};
 const steps = [];
 const ok = (name) => { steps.push(name); console.log('ok -', name); };
 const visibleSection = async () => page.evaluate(() => [...document.querySelectorAll('main > section')].find((s) => !s.hidden)?.id);
@@ -157,7 +162,8 @@ try {
   await checkToggle('landing');
   const landingLoop = await page.locator('.demo-tabs').innerText();
   assert.match(landingLoop, /01 · Learn[\s\S]*02 · Practice[\s\S]*03 · Debrief[\s\S]*04 · Drill/);
-  assert.equal(await page.locator('.loop-strip article').count(), 4);
+  assert.equal(await page.locator('#start .demo-tabs button').count(), 4);
+  assert.equal(await page.locator('#start .start-steps li').count(), 6);
   assert.match(await page.locator('#paste .eyebrow').innerText(), /01 · Learn/);
   ok('landing: one numbered four-step loop and clear first-job onboarding');
   assert.equal(await toggle.getAttribute('aria-checked'), 'false');
@@ -224,8 +230,8 @@ try {
   await page.click('#practice-back');
   await workspaceHold.enteredPromise;
   assert.equal(await visibleSection(), 'workspaces', 'first Back click opens the hub while refresh is held');
-  await page.click('[data-go=hub-practice]');
-  assert.equal(await visibleSection(), 'practice', 'cached hub can route to Practice before refresh ends');
+  await openPracticeRail();
+  assert.equal(await visibleSection(), 'practice', 'navigation can route to Practice before refresh ends');
   workspaceHold.release();
   heldApiOps.delete('workspaces');
   await page.waitForTimeout(100);
@@ -238,7 +244,7 @@ try {
   await startHold.enteredPromise;
   await page.click('#practice-back');
   assert.equal(await visibleSection(), 'workspaces', 'Back returns to the hub during typed start');
-  await page.click('[data-go=hub-practice]');
+  await openPracticeRail();
   assert.equal(await visibleSection(), 'practice');
   startHold.release();
   heldApiOps.delete('start');
@@ -288,7 +294,7 @@ try {
   await checkToggle('debrief');
   const debriefText = await page.locator('#debrief').textContent();
   assert.match(debriefText, /said in everyday words/, 'debrief feedback is plain while the switch is on');
-  assert.match(debriefText, /You answered the question well/, 'strength is still first');
+  assert.match(debriefText, /You explained your staffing decision clearly/, 'specific strength is preserved');
   ok('global ON: debrief translated, strengths first');
 
   // User answers were never wrapped or changed (checked on the interview transcript).
@@ -296,7 +302,8 @@ try {
   await flip();
   assert.equal(await toggle.getAttribute('aria-checked'), 'false');
   await page.waitForFunction(() => !/said in everyday words/.test(document.querySelector('#debrief').textContent));
-  assert.match(await page.locator('#debrief').textContent(), /You answered the question well and your example was specific\. Next time/);
+  assert.equal((await page.locator('#report > p .plain-text').nth(0).textContent()).trim(), 'You explained your staffing decision clearly.');
+  assert.equal((await page.locator('#report > p .plain-text').nth(1).textContent()).trim(), 'Next time: add one number that shows the result.');
   ok('global OFF: originals restored');
 
   // Reload with the switch ON: remembered, then OFF again.

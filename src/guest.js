@@ -2,6 +2,14 @@ import { id, hash } from './repository.js';
 
 export class GuestRepository {
   constructor(state = {}) {
+    const arrays = ['sources', 'workspaces', 'facts', 'interviews', 'turns', 'debriefs', 'events', 'requirements',
+      'rewriteSlots', 'storyDigs', 'drillCards', 'drillReviews', 'realInterviews', 'factGateDecisions',
+      'immersions', 'factConflictReviews', 'jobHuntHistory'];
+    if (!state || typeof state !== 'object' || Array.isArray(state) || arrays.some((key) => state[key] !== undefined &&
+      (!Array.isArray(state[key]) || state[key].some((row) => !row || typeof row !== 'object' || Array.isArray(row)))) ||
+      (state.writingProfile !== undefined && (!state.writingProfile || typeof state.writingProfile !== 'object' || Array.isArray(state.writingProfile)))) {
+      const error = new Error('Invalid guest state.'); error.status = 400; throw error;
+    }
     this.state = {
       sources: state.sources ?? [], workspaces: state.workspaces ?? [], facts: state.facts ?? [],
       interviews: state.interviews ?? [], turns: state.turns ?? [], debriefs: state.debriefs ?? [],

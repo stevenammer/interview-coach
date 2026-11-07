@@ -30,6 +30,7 @@ export function createPlainEnglish({ fetchPlain, doc = document, session = null,
   const entries = new Set();
   const memory = new Map();
   const listeners = new Set();
+  let generation = 0;
 
   // At most two translations in flight, so turning the switch on over a long debrief
   // doesn't fire a dozen requests at once.
@@ -50,20 +51,34 @@ export function createPlainEnglish({ fetchPlain, doc = document, session = null,
   }
 
   async function translate(text, kind) {
+    const epoch = generation;
     const id = `${kind}:${await digest(text)}`;
+    if (epoch !== generation) return { text: null, glossary: [], source: 'decoder' };
     if (memory.has(id)) return memory.get(id);
     try {
       const saved = sessionStore?.getItem(CACHE_PREFIX + id);
-      if (saved) { const value = JSON.parse(saved); memory.set(id, value); return value; }
+      if (saved) {
+        const value = JSON.parse(saved);
+        if (value && typeof value.text === 'string' && value.text.length <= 5000 &&
+            ['model', 'cache'].includes(value.source) && Array.isArray(value.glossary) &&
+            value.glossary.every((item) => item && typeof item.term === 'string' && typeof item.plain === 'string')) {
+          memory.set(id, value); return value;
+        }
+        sessionStore?.removeItem(CACHE_PREFIX + id);
+      }
     } catch { /* Fetch again. */ }
-    const pending = enqueue(() => fetchPlain(text, kind)).then((result) => {
+    const pending = enqueue(() => {
+      if (epoch !== generation) throw new Error('Session changed');
+      return fetchPlain(text, kind);
+    }).then((result) => {
+      if (epoch !== generation) return { text: null, glossary: [], source: 'decoder' };
       // Only a real translation is kept; a fallback is retried next time.
       if (result?.source === 'model' || result?.source === 'cache') {
         try { sessionStore?.setItem(CACHE_PREFIX + id, JSON.stringify(result)); } catch { /* Memory only. */ }
       } else memory.delete(id);
       return result;
     }).catch(() => {
-      memory.delete(id);
+      if (epoch === generation) memory.delete(id);
       return { text: null, glossary: decodeTerms(text), source: 'decoder', degraded: 'offline' };
     });
     memory.set(id, pending);
@@ -159,7 +174,21 @@ export function createPlainEnglish({ fetchPlain, doc = document, session = null,
     for (const listener of listeners) listener(on);
   }
 
-  return { plainSpan, plainNode, setOn, isOn: () => on, onChange: (fn) => listeners.add(fn), translate };
+  function clear() {
+    generation += 1;
+    for (const entry of entries) entry.ticket += 1;
+    entries.clear(); memory.clear();
+    for (const queued of waiting.splice(0)) queued.reject(new Error('Session changed'));
+    try {
+      const keys = [];
+      for (let index = 0; index < (sessionStore?.length ?? 0); index++) {
+        const key = sessionStore.key(index);
+        if (key?.startsWith(CACHE_PREFIX)) keys.push(key);
+      }
+      for (const key of keys) sessionStore.removeItem(key);
+    } catch { /* Memory still clears when storage is unavailable. */ }
+  }
+  return { plainSpan, plainNode, setOn, clear, isOn: () => on, onChange: (fn) => listeners.add(fn), translate };
 }
 
 // The header switch.

@@ -18,6 +18,12 @@ const guestKey = 'interview-coach-guest';
 const guestDraftKey = 'interview-coach-guest-draft';
 const guestAnswerKey = 'interview-coach-guest-answer';
 const guestCacheSessionKey = 'interview-coach-cache-guest-id';
+function clearInterviewCoachSessionStorage() {
+  for (let index = sessionStorage.length - 1; index >= 0; index--) {
+    const key = sessionStorage.key(index);
+    if (key?.startsWith('interview-coach-')) sessionStorage.removeItem(key);
+  }
+}
 function clearInterviewCoachLocalStorage() {
   try {
     for (let index = localStorage.length - 1; index >= 0; index -= 1) {
@@ -361,6 +367,7 @@ $('message').addEventListener('click', () => { $('message').hidden = true; });
 function plainError(text) {
   const raw = String(text ?? '');
   const rules = [
+    [/source_deleted/i, 'This AI task stopped because its source changed. Start again with your current documents.'],
     [/spend_cap_reached|daily model spend cap/i, 'Interview Coach has used up its AI allowance for today. Your work is saved. Please try again tomorrow.'],
     [/accounting_unavailable|spend accounting/i, 'The AI helper is paused for a few minutes. Your work is saved. Please try again soon.'],
     [/model_unavailable|model provider unavailable|model job failed/i, 'The AI helper didn\'t answer this time. Your work is safe. Tap Try again, or wait a minute and retry.'],
@@ -517,7 +524,7 @@ async function resolveJob(result) {
 
 async function run(button, task, loadingText = null) {
   message('');
-  const originalLabel = button.textContent;
+  const originalChildren = [...button.childNodes].filter((child) => !child.classList?.contains('tap-ripple')).map((child) => child.cloneNode(true));
   button.disabled = true;
   button.classList.add('is-busy');
   button.setAttribute('aria-busy', 'true');
@@ -539,7 +546,7 @@ async function run(button, task, loadingText = null) {
     clearTimeout(slow);
     if ($('progress-note').textContent.startsWith('Working on it') || $('progress-note').textContent === loadingText) $('progress-note').hidden = true;
     button.disabled = false;
-    if (button.id !== 'retry-pending-job') button.textContent = originalLabel;
+    if (button.id !== 'retry-pending-job') button.replaceChildren(...originalChildren);
     button.classList.remove('is-busy');
     button.removeAttribute('aria-busy');
   }
@@ -592,6 +599,16 @@ function identity() {
   if (nextIdentity !== proofIdentity) {
     sessionEpoch += 1;
     cancelSessionMedia();
+    plain.clear();
+    currentPrepSections = []; voiceCandidateTurns = []; hubWorkspaces = [];
+    currentWorkspace = null; immersion = null; digId = null;
+    selectedConflictFacts.clear(); mapBuilding.clear(); mapFailed.clear();
+    for (const id of ['report', 'transcript', 'between-answer-coaching', 'writer-output',
+      'prep-sections', 'sample-list', 'coach-note-list', 'drill-list', 'real-feed',
+      'dig-prompt', 'dig-reflection', 'immerser-content', 'immerser-choices',
+      'workspace-list', 'job-comparison-table', 'job-hunt-history']) $(id).replaceChildren();
+    for (const field of document.querySelectorAll('main textarea, main input:not([type=radio]):not([type=checkbox])')) field.value = '';
+    $('writer-editor').hidden = true;
     clearProofShelf();
     $('fact-list').replaceChildren();
     $('bank-summary').textContent = '';
@@ -1289,7 +1306,9 @@ function renderStronger(draft, target = $('report')) {
   }
   const copy = node('button', 'Copy stronger draft');
   copy.disabled = !draft.ready;
-  copy.addEventListener('click', () => navigator.clipboard.writeText(draft.text));
+  copy.addEventListener('click', () => run(copy, async () => {
+    await navigator.clipboard.writeText(draft.text); message('Copied.');
+  }));
   section.append(copy);
   if (!draft.ready) section.append(node('p', 'Fill and confirm each detail, or leave it out, to enable copying.'));
   target.append(section);
@@ -1716,6 +1735,7 @@ $('end-session').addEventListener('click', (event) => run(event.currentTarget, a
   sessionStorage.removeItem('interview-coach-job');
   sessionStorage.removeItem(guestDraftKey);
   sessionStorage.removeItem(guestAnswerKey);
+  clearInterviewCoachSessionStorage();
   guest = false; state = {}; workspaceId = null; interviewId = null; pendingJob = null; currentUser = null;
   identity(); show('landing');
 }));
@@ -1738,7 +1758,8 @@ $('delete-account').addEventListener('click', (event) => {
     interviewCache()?.clearNamespace();
     await api('delete_account');
     clearInterviewCoachLocalStorage();
-    currentUser = null; workspaceId = null; interviewId = null;
+    clearInterviewCoachSessionStorage();
+    currentUser = null; workspaceId = null; interviewId = null; pendingJob = null;
     sessionStorage.removeItem('interview-coach-workspace');
     sessionStorage.removeItem('interview-coach-interview');
     identity(); show('landing');
@@ -2460,7 +2481,7 @@ let activeWriterKind = null;
 const writerDraftKey = (kind) => `interview-coach-writer:${workspaceId}:${kind}`;
 const writerLatestKey = () => `interview-coach-writer-latest:${workspaceId}`;
 function readWriterDraft(kind) {
-  try { return JSON.parse(localStorage.getItem(writerDraftKey(kind)) || 'null'); }
+  try { return readStoredObject(localStorage, writerDraftKey(kind)); }
   catch { return null; }
 }
 function writeWriterDraft() {
@@ -2495,9 +2516,9 @@ function safeWriterDoc(doc) {
     text: String(doc.text ?? ''),
     flagged: Number(doc.flagged) || 0,
     gaps: Array.isArray(doc.gaps) ? doc.gaps.slice(0, 10).map(String) : [],
-    sections: Array.isArray(doc.sections) ? doc.sections.map((section) => ({
+    sections: Array.isArray(doc.sections) ? doc.sections.filter((section) => section && typeof section === 'object').map((section) => ({
       heading: String(section.heading ?? ''),
-      lines: Array.isArray(section.lines) ? section.lines.map((line) => ({ text: String(line.text ?? ''), check: line.check ? String(line.check) : null })) : [],
+      lines: Array.isArray(section.lines) ? section.lines.filter((line) => line && typeof line === 'object').map((line) => ({ text: String(line.text ?? ''), check: line.check ? String(line.check) : null })) : [],
     })) : [],
   };
 }

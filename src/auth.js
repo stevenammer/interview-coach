@@ -15,6 +15,7 @@ export async function passwordHash(password) {
 }
 
 export async function verifyPassword(password, encoded) {
+  if (typeof password !== 'string' || password.length < 12 || password.length > 200) return false;
   const [scheme, salt, expected] = String(encoded).split(':');
   if (scheme !== 'scrypt-v1' || !salt || !expected) return false;
   const actual = await scrypt(password, salt, 64);

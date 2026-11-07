@@ -235,9 +235,11 @@ export class GeminiAdapter {
         signal: controller.signal,
       });
       if (!response.ok) {
-        // The provider definitively rejected this request, so it cannot have used model tokens.
-        await settle(0);
-        const error = new Error(`Gemini request failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
+        // Only a definitive client rejection establishes a no-charge outcome.
+        // A timeout or server error may arrive after work started, so keep that hold.
+        if (response.status >= 400 && response.status < 500 && response.status !== 408) await settle(0);
+        // Provider error bodies can echo submitted source text or credentials.
+        const error = new Error(`Gemini request failed (${response.status})`);
         error.retryable = response.status === 429 || response.status >= 500;
         throw error;
       }

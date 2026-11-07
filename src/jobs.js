@@ -18,7 +18,22 @@ export async function runModelJob(repo, model, owner, jobId) {
     await activeJob();
     return result;
   } };
-  const service = new CoachService(repo, guardedModel, owner);
+  // Serialize each persistence operation with source/account deletion. A check
+  // immediately after the provider returns alone still has a check/write race.
+  const jobRepo = typeof repo.withResourceLock === 'function' ? new Proxy(repo, {
+    get(target, property) {
+      const value = target[property];
+      if (typeof value !== 'function') return value;
+      return (...args) => target.withResourceLock(async (locked) => {
+        if ((await locked.job(owner, jobId))?.status !== 'running') {
+          const error = new Error('This job was cancelled because its source changed.');
+          error.code = 'source_deleted'; throw error;
+        }
+        return locked[property](...args);
+      });
+    },
+  }) : repo;
+  const service = new CoachService(jobRepo, guardedModel, owner);
   try {
     let result;
     if (job.kind === 'paste') result = await service.paste(owner, job.input_json);

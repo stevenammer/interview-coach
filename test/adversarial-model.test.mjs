@@ -172,3 +172,16 @@ test('a successful response without usage keeps the enlarged reservation', async
   assert.ok(reserved > 2_000_000);
   assert.equal(settled, 0);
 });
+
+test('uncertain provider failures retain their holds without exposing response bodies', async () => {
+  for (const status of [408, 500, 503, 429, 400]) {
+    const settled = []; let bodyRead = false;
+    const adapter = new GeminiAdapter({ repo: { async reserve() { return 'hold'; }, async settle(_id, amount) { settled.push(amount); } },
+      env: { GEMINI_API_KEY: 'offline-test' }, fetchImpl: async () => ({ ok: false, status,
+        async text() { bodyRead = true; return 'PRIVATE_ERROR_BODY_TEST_SENTINEL'; } }) });
+    await assert.rejects(adapter.call('gemini-3.8-flash', 'test', 'A prompt'), (error) =>
+      error.message === `Gemini request failed (${status})`);
+    assert.equal(bodyRead, false);
+    assert.deepEqual(settled, [429, 400].includes(status) ? [0] : []);
+  }
+});

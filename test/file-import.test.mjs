@@ -93,3 +93,17 @@ test('recognizes a blank-MIME PNG by signature and rejects binary disguised as t
   await assert.rejects(classifyImportFile(file('resume.txt', new Uint8Array(10_000_001))), /under 10 MB/);
   await assert.rejects(classifyImportFile(file('upload.bin', 'bytes')), /cannot be read/);
 });
+
+
+test('ODT repeated spaces have an aggregate expansion budget before allocation', async () => {
+  const xml = `<office:document-content xmlns:office="${officeNs}" xmlns:text="${textNs}"><office:body><office:text><text:p>Visible${'<text:s text:c="10000"/>'.repeat(21)}</text:p></office:text></office:body></office:document-content>`;
+  await assert.rejects(extractImportDocument(odtFile(xml), { DOMParser: StrictDOMParser }), /safe expanded text limit/);
+});
+
+test('ODT deeply nested text is rejected before the XML parser runs', async () => {
+  let parsed = false;
+  class MustNotParse { parseFromString() { parsed = true; throw new Error('should not parse'); } }
+  const xml = `<office:document-content xmlns:office="${officeNs}" xmlns:text="${textNs}"><office:body><office:text><text:p>${'<text:span>'.repeat(130)}Text${'</text:span>'.repeat(130)}</text:p></office:text></office:body></office:document-content>`;
+  await assert.rejects(extractImportDocument(odtFile(xml), { DOMParser: MustNotParse }), /nested too deeply/);
+  assert.equal(parsed, false);
+});

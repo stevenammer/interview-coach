@@ -1,10 +1,10 @@
-import { strFromU8, unzipSync } from 'fflate';
-import { extractDocument } from './documents.js';
+import { strFromU8 } from 'fflate';
+import { extractDocument, boundedDocumentZip, validateImportXml, MAX_EXTRACTED_CHARS } from './documents.js';
+export { extractDocument } from './documents.js';
 
 export const MAX_IMPORT_BYTES = 10_000_000;
 const MAX_ODT_CONTENT_BYTES = 2_000_000;
 const MAX_ODT_MIMETYPE_BYTES = 128;
-const MAX_ODT_ENTRIES = 256;
 
 const ODT_OFFICE_NS = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
 const ODT_TEXT_NS = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
@@ -150,27 +150,34 @@ const hiddenOdtNames = new Set([
   'deletion', 'deleted-text', 'tracked-changes', 'changed-region',
 ]);
 
-function odtInlineText(node) {
-  if (node.nodeType === 3 || node.nodeType === 4) return node.nodeValue || '';
+function countOdtText(text, budget) {
+  budget.chars += text.length;
+  if (budget.chars > MAX_EXTRACTED_CHARS) throw new Error('ODT text exceeds the safe expanded text limit.');
+  return text;
+}
+
+function odtInlineText(node, budget) {
+  if (node.nodeType === 3 || node.nodeType === 4) return countOdtText(node.nodeValue || '', budget);
   if (node.nodeType !== 1 || node.namespaceURI !== ODT_TEXT_NS || hiddenOdtNames.has(node.localName)) return '';
   if (node.localName === 's') {
     const count = Number(node.getAttributeNS(ODT_TEXT_NS, 'c') || 1);
     if (!Number.isInteger(count) || count < 1 || count > 10_000) throw new Error('This ODT has an invalid repeated-space run.');
-    return ' '.repeat(count);
+    if (budget.chars + count > MAX_EXTRACTED_CHARS) throw new Error('ODT text exceeds the safe expanded text limit.');
+    return countOdtText(' '.repeat(count), budget);
   }
-  if (node.localName === 'tab') return '\t';
-  if (node.localName === 'line-break') return '\n';
-  return childrenOf(node).map(odtInlineText).join('');
+  if (node.localName === 'tab') return countOdtText('\t', budget);
+  if (node.localName === 'line-break') return countOdtText('\n', budget);
+  return childrenOf(node).map((child) => odtInlineText(child, budget)).join('');
 }
 
-function odtBlockText(node) {
+function odtBlockText(node, budget) {
   if (node.nodeType !== 1) return '';
   if (node.namespaceURI === ODT_OFFICE_NS && hiddenOdtNames.has(node.localName)) return '';
   if (node.namespaceURI === ODT_TEXT_NS) {
     if (hiddenOdtNames.has(node.localName)) return '';
-    if (node.localName === 'p' || node.localName === 'h') return `${childrenOf(node).map(odtInlineText).join('')}\n`;
+    if (node.localName === 'p' || node.localName === 'h') return `${childrenOf(node).map((child) => odtInlineText(child, budget)).join('')}\n`;
     if (['list', 'list-item', 'section', 'ordered-list', 'unordered-list'].includes(node.localName)) {
-      return childrenOf(node).map(odtBlockText).join('');
+      return childrenOf(node).map((child) => odtBlockText(child, budget)).join('');
     }
     return '';
   }
@@ -178,9 +185,9 @@ function odtBlockText(node) {
     if (node.localName === 'table-row') {
       const cells = childrenOf(node).filter((child) => child.nodeType === 1 && child.namespaceURI === ODT_TABLE_NS &&
         ['table-cell', 'covered-table-cell'].includes(child.localName));
-      return `${cells.map((cell) => childrenOf(cell).map(odtBlockText).join('').replace(/\n+$/, '')).join('\t')}\n`;
+      return `${cells.map((cell) => childrenOf(cell).map((child) => odtBlockText(child, budget)).join('').replace(/\n+$/, '')).join('\t')}\n`;
     }
-    return childrenOf(node).map(odtBlockText).join('');
+    return childrenOf(node).map((child) => odtBlockText(child, budget)).join('');
   }
   return '';
 }
@@ -188,6 +195,7 @@ function odtBlockText(node) {
 function extractOdtText(xml, Parser = globalThis.DOMParser) {
   if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml)) throw new Error('This ODT uses unsupported XML declarations. Save it again or choose PDF/DOCX.');
   if (typeof Parser !== 'function') throw new Error('This browser cannot safely read ODT XML. Save as PDF or DOCX.');
+  validateImportXml(xml);
   let document;
   try { document = new Parser().parseFromString(xml, 'application/xml'); }
   catch { throw new Error('This ODT contains malformed XML. Save it again or choose PDF/DOCX.'); }
@@ -202,49 +210,25 @@ function extractOdtText(xml, Parser = globalThis.DOMParser) {
   const officeText = body && childrenOf(body).find((node) => node.nodeType === 1 &&
     node.namespaceURI === ODT_OFFICE_NS && node.localName === 'text');
   if (!officeText) throw new Error('This ODT has no readable document text. Save it again or paste the text.');
-  const text = childrenOf(officeText).map(odtBlockText).join('')
+  const budget = { chars: 0 };
+  const text = childrenOf(officeText).map((child) => odtBlockText(child, budget)).join('')
     .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (text.length > MAX_EXTRACTED_CHARS) throw new Error('ODT text exceeds the safe expanded text limit.');
   if (!text) throw new Error('This ODT has no readable document text. Save it again or paste the text.');
   return text;
 }
 
 function extractOdt(buffer, Parser = globalThis.DOMParser) {
-  let entryCount = 0;
-  const seenEntries = new Set();
-  let oversizedContent = false;
-  let oversizedMime = false;
   let files;
   try {
-    files = unzipSync(new Uint8Array(buffer), {
-      filter(entry) {
-        entryCount += 1;
-        if (entryCount > MAX_ODT_ENTRIES) throw new Error('ODT archive has too many entries.');
-        if (entry.name === 'content.xml') {
-          if (seenEntries.has(entry.name)) throw new Error('Duplicate ODT content.xml entry.');
-          seenEntries.add(entry.name);
-          if (!Number.isSafeInteger(entry.originalSize) || entry.originalSize > MAX_ODT_CONTENT_BYTES) {
-            oversizedContent = true;
-            return false;
-          }
-          return true;
-        }
-        if (entry.name === 'mimetype') {
-          if (seenEntries.has(entry.name)) throw new Error('Duplicate ODT mimetype entry.');
-          seenEntries.add(entry.name);
-          if (!Number.isSafeInteger(entry.originalSize) || entry.originalSize > MAX_ODT_MIMETYPE_BYTES) {
-            oversizedMime = true;
-            return false;
-          }
-          return true;
-        }
-        return false;
-      },
+    files = boundedDocumentZip(buffer, {
+      select: (name) => name === 'content.xml' || name === 'mimetype',
+      maxEntryBytes: (name) => name === 'content.xml' ? MAX_ODT_CONTENT_BYTES : MAX_ODT_MIMETYPE_BYTES,
+      maxTotalBytes: MAX_ODT_CONTENT_BYTES + MAX_ODT_MIMETYPE_BYTES,
     });
   } catch {
-    throw new Error('This ODT ZIP is damaged, encrypted, or unsupported. Save it again or choose PDF/DOCX.');
+    throw new Error('This ODT ZIP is damaged, encrypted, or unsupported, or exceeds the 2 MB safe limit. Save as PDF/DOCX.');
   }
-  if (oversizedContent) throw new Error('ODT content.xml exceeds the 2 MB safe limit. Save as PDF/DOCX.');
-  if (oversizedMime) throw new Error('This ODT has an invalid mimetype entry. Save it again or choose PDF/DOCX.');
   const mimetype = files.mimetype && strFromU8(files.mimetype).trim();
   if (mimetype !== MIME_TYPES.odt) throw new Error('This ZIP is not an OpenDocument text file. Choose PDF or DOCX.');
   const content = files['content.xml'];
@@ -262,6 +246,7 @@ export async function extractImportDocument(file, options = {}) {
   if (['pdf', 'docx', 'csv'].includes(kind)) return extractDocument(file, options);
   const buffer = await file.arrayBuffer();
   if (kind === 'odt') return { text: extractOdt(buffer, options.DOMParser), pageOffsets: [], sectionLabel: 'ODT body', mimeType };
+  if (buffer.byteLength > MAX_EXTRACTED_CHARS) throw new Error('Document text exceeds the 200,000 character safe limit.');
   const raw = decodeText(new Uint8Array(buffer), kind.toUpperCase());
   const text = kind === 'rtf' ? decodeRtf(raw) : raw.trim();
   if (!text) throw new Error(`This ${kind.toUpperCase()} file is empty. Paste the text instead.`);

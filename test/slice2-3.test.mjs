@@ -1,3 +1,4 @@
+import { zipSync, strToU8 } from 'fflate';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -15,7 +16,7 @@ import { ModelOutputError } from '../src/model.js';
 
 async function database() {
   const db = new PGlite();
-  for (const file of ['001_core.sql', '002_jobs.sql', '003_ingestion.sql', '004_workspaces.sql', '005_rewrites.sql', '006_interviewer.sql', '007_story_dig.sql', '008_drills.sql', '009_real_interviews.sql', '010_fact_gate.sql', '011_immerser.sql', '012_voice.sql', '013_guest_voice.sql', '015_debrief_input_hash.sql', '016_job_comparison.sql', '020_security_audit.sql', '021_security_hardening_3.sql', '022_fact_conflict_reviews.sql']) {
+  for (const file of ['001_core.sql', '002_jobs.sql', '003_ingestion.sql', '004_workspaces.sql', '005_rewrites.sql', '006_interviewer.sql', '007_story_dig.sql', '008_drills.sql', '009_real_interviews.sql', '010_fact_gate.sql', '011_immerser.sql', '012_voice.sql', '013_guest_voice.sql', '015_debrief_input_hash.sql', '016_job_comparison.sql', '020_security_audit.sql', '021_security_hardening_3.sql', '022_fact_conflict_reviews.sql', '023_resource_guard.sql']) {
     await db.exec(await readFile(new URL(`../netlify/database/migrations/${file}`, import.meta.url), 'utf8'));
   }
   return { db, repo: new Repository(pgliteSql(db)) };
@@ -152,7 +153,8 @@ test('browser PDF/DOCX and LinkedIn export parsing', async () => {
   const file = { name: 'resume.pdf', size: 100, arrayBuffer: async () => new ArrayBuffer(4) };
   const parsed = await extractDocument(file, { pdfModule: pdf });
   assert.deepEqual(parsed.pageOffsets, [0, parsed.text.indexOf('Reduced')]);
-  const docx = await extractDocument({ ...file, name: 'resume.docx' },
+  const docxBytes = zipSync({ '[Content_Types].xml': strToU8('<Types/>'), 'word/document.xml': strToU8('<document/>') });
+  const docx = await extractDocument({ ...file, name: 'resume.docx', arrayBuffer: async () => docxBytes.buffer },
     { mammoth: { extractRawText: async () => ({ value: 'At Mesa Center, coached new hires.' }) } });
   assert.equal(docx.text, 'At Mesa Center, coached new hires.');
   assert.deepEqual(docx.pageOffsets, []);

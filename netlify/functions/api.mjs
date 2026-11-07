@@ -7,6 +7,7 @@ import { passwordHash, verifyPassword, validUsername, issueSession, sessionToken
 import { getStore } from '@netlify/blobs';
 import { startVoice, voiceConfigured, startGuestVoice, guestVoiceStatus, guestVoiceConfigured, guestVoiceLimits } from '../../src/voice.js';
 import { translatePlain, cachedPlain, PLAIN_KINDS, PLAIN_MAX_INPUT } from '../../src/plain.js';
+import { readJsonObject } from '../../src/request-body.js';
 
 // "Say it plain" has its own small allowance, separate from practice, so turning on
 // Plain English can never use up the calls someone needs to practice. Cache hits are free.
@@ -50,7 +51,11 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
           return json({ error: 'same_origin_required' }, 403);
         }
       }
-      const data = request.method === 'POST' ? await request.json() : {};
+      let data = {};
+      if (request.method === 'POST') {
+        data = await readJsonObject(request, op === 'upload_chunk' ? 2100000 :
+          op === 'transcribe_voice' ? 3100000 : op === 'read_image' ? 2900000 : 110000);
+      }
       if (JSON.stringify(data).length > (op === 'upload_chunk' ? 2100000 :
         op === 'transcribe_voice' ? 3100000 : op === 'read_image' ? 2900000 : 110000)) return json({ error: 'request_too_large' }, 413);
       const secure = url.protocol === 'https:';
@@ -98,6 +103,9 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         if (!user) return json({ error: 'authentication_required' }, 401);
         if (!await repo.abuse('change_password', subject, 6)) return json({ error: 'rate_limited' }, 429);
         const { currentPassword, newPassword } = data;
+        if (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 200) {
+          throw new InputError('Password must be 12 to 200 characters.');
+        }
         const found = await repo.userByName(user.username);
         if (typeof currentPassword !== 'string' || !found || !await verifyPassword(currentPassword, found.password_hash)) {
           return json({ error: 'invalid_credentials' }, 401);
@@ -114,18 +122,22 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
 
       if (op === 'delete_account' && request.method === 'POST') {
         if (!user) return json({ error: 'authentication_required' }, 401);
-        if (blobStore) for (const upload of await repo.allUploads(user.id)) {
-          for (let part = 0; part < upload.chunk_count; part += 1) {
-            await blobStore.delete(`${user.id}/${upload.id}/${part}`);
+        await repo.withResourceLock(async (locked) => {
+          if (blobStore) for (const upload of await locked.allUploads(user.id)) {
+            for (let part = 0; part < upload.chunk_count; part += 1) {
+              await blobStore.delete(`${user.id}/${upload.id}/${part}`);
+            }
           }
-        }
-        await repo.deleteAccount(user.id);
+          await locked.deleteAccount(user.id);
+        });
         return json({ deleted: true }, 200, { 'set-cookie': `${secure ? '__Host-ic_session' : 'ic_session'}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? '; Secure' : ''}` });
       }
 
       const guest = data.guest === true;
       if (!user && !guest) return json({ error: 'authentication_required' }, 401);
       if (guest && user) return json({ error: 'choose_account_or_guest' }, 400);
+      if (user && (!await repo.abuse('account_api', accountAbuseSubject(user.id, abuseKey), 1200, 60) ||
+          !await repo.abuse('account_api_all', 'all', 20000, 60))) return json({ error: 'rate_limited' }, 429);
       if (op === 'plain') {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
         const { text, kind } = data;
@@ -304,7 +316,7 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         if (!bytes.length || bytes.length > 2000000 || bytes.toString('base64') !== data.base64) {
           throw new InputError('Voice note is invalid or over 2 MB.');
         }
-        result = { text: await model.transcribe(data.base64, data.mimeType) };
+        result = { text: await model.transcribe(data.base64, data.mimeType, user?.id ?? null) };
       }
       else if (op === 'read_image' && request.method === 'POST') {
         if (typeof data.base64 !== 'string' || data.base64.length > 2700000 ||
@@ -315,7 +327,7 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         if (!bytes.length || bytes.length > 2000000 || bytes.toString('base64') !== data.base64) {
           throw new InputError('That image is invalid or over 2 MB.');
         }
-        result = { text: await model.readImage(data.base64, data.mimeType) };
+        result = { text: await model.readImage(data.base64, data.mimeType, user?.id ?? null) };
       }
       else if (op === 'real_feed' && request.method === 'POST') result = await service.realInterviewFeed(owner, data.workspaceId);
       else if (op === 'workspace_map' && request.method === 'POST') {
@@ -336,10 +348,7 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         result = await profileRepo.writingProfile(owner);
       }
       else if (op === 'upload_init' && request.method === 'POST' && user && blobStore) {
-        const expired = await repo.expirePendingUploads(owner);
-        for (const upload of expired) for (let part = 0; part < upload.chunk_count; part += 1) {
-          await blobStore.delete(`${owner}/${upload.id}/${part}`);
-        }
+        await repo.expirePendingUploads(owner, new Date(), blobStore);
         const source = await repo.source(owner, data.sourceId);
         if (!source) throw new InputError('Source not found', 404);
         if (!['resume', 'jd', 'linkedin', 'background'].includes(source.kind)) {
@@ -353,7 +362,8 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         }
         if (!Number.isInteger(data.byteSize) || data.byteSize < 1 || data.byteSize > 10000000 ||
           !Number.isInteger(data.chunkCount) || data.chunkCount !== Math.ceil(data.byteSize / UPLOAD_CHUNK_BYTES) ||
-          !['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/csv'].includes(data.mimeType) ||
+          !['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/csv',
+            'text/plain', 'text/markdown', 'application/rtf', 'application/vnd.oasis.opendocument.text'].includes(data.mimeType) ||
           typeof data.name !== 'string' || data.name.length > 120) throw new InputError('Invalid upload metadata.');
         if (await repo.pendingUploadBytes(owner) + data.byteSize > PENDING_UPLOAD_MAX_BYTES) {
           throw new InputError('Finish or remove a pending upload before adding more files.', 429);
@@ -361,19 +371,21 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         result = await repo.initUpload(owner, source.id, data.name, data.mimeType, data.byteSize, data.chunkCount);
       }
       else if (op === 'upload_chunk' && request.method === 'POST' && user && blobStore) {
-        const upload = await repo.upload(owner, data.uploadId);
-        if (!upload || upload.status !== 'pending' || !Number.isInteger(data.part) ||
-          data.part < 0 || data.part >= upload.chunk_count || typeof data.base64 !== 'string' ||
-          data.base64.length > 2100000) throw new InputError('Invalid upload chunk.');
-        const bytes = Buffer.from(data.base64, 'base64');
-        const expectedBytes = Math.min(UPLOAD_CHUNK_BYTES, upload.byte_size - data.part * UPLOAD_CHUNK_BYTES);
-        if (!bytes.length || bytes.length !== expectedBytes || bytes.toString('base64') !== data.base64) throw new InputError('Invalid upload bytes.');
-        await blobStore.set(`${owner}/${upload.id}/${data.part}`, bytes);
-        await repo.saveChunk(owner, upload.id, data.part, bytes.length);
+        await repo.withResourceLock(async (locked) => {
+          const upload = await locked.upload(owner, data.uploadId);
+          if (!upload || upload.status !== 'pending' || !Number.isInteger(data.part) ||
+            data.part < 0 || data.part >= upload.chunk_count || typeof data.base64 !== 'string' ||
+            data.base64.length > 2100000) throw new InputError('Invalid upload chunk.');
+          const bytes = Buffer.from(data.base64, 'base64');
+          const expectedBytes = Math.min(UPLOAD_CHUNK_BYTES, upload.byte_size - data.part * UPLOAD_CHUNK_BYTES);
+          if (!bytes.length || bytes.length !== expectedBytes || bytes.toString('base64') !== data.base64) throw new InputError('Invalid upload bytes.');
+          await blobStore.set(`${owner}/${upload.id}/${data.part}`, bytes);
+          await locked.saveChunk(owner, upload.id, data.part, bytes.length);
+        });
         result = { stored: true };
       }
       else if (op === 'upload_finish' && request.method === 'POST' && user && blobStore) {
-        if (!await repo.finishUpload(owner, data.uploadId)) throw new InputError('Upload is incomplete.');
+        if (!await repo.withResourceLock((locked) => locked.finishUpload(owner, data.uploadId))) throw new InputError('Upload is incomplete.');
         result = { ready: true };
       }
       else if (op === 'source_uploads' && request.method === 'POST' && user && blobStore) {
@@ -408,12 +420,18 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
       }
       else if (op === 'delete_fact' && request.method === 'POST') result = await service.deleteFact(owner, data.workspaceId, data.factId);
       else if (op === 'delete_source' && request.method === 'POST') {
-        if (user && blobStore) for (const upload of await repo.sourceUploads(owner, data.sourceId)) {
-          for (let part = 0; part < upload.chunk_count; part += 1) {
-            await blobStore.delete(`${owner}/${upload.id}/${part}`);
+        if (user) result = await repo.withResourceLock(async (locked) => {
+          if (!await locked.workspace(owner, data.workspaceId) || !await locked.source(owner, data.sourceId)) {
+            throw new InputError('Source or workspace not found', 404);
           }
-        }
-        result = await service.deleteSource(owner, data.workspaceId, data.sourceId);
+          if (blobStore) for (const upload of await locked.sourceUploads(owner, data.sourceId)) {
+            for (let part = 0; part < upload.chunk_count; part += 1) {
+              await blobStore.delete(`${owner}/${upload.id}/${part}`);
+            }
+          }
+          return new CoachService(locked, model, owner).deleteSource(owner, data.workspaceId, data.sourceId);
+        });
+        else result = await service.deleteSource(owner, data.workspaceId, data.sourceId);
       }
       else if (op === 'start' && request.method === 'POST') result = await service.start(owner, data.workspaceId, data.persona,
         data.difficulty ?? 2, data.practiceMode ?? 'mock');
@@ -482,14 +500,10 @@ export function plainAdapter(repo, env = process.env) {
     GEMINI_MODEL_PRIMARY: 'gemini-3.5-flash-lite', GEMINI_MODEL_FALLBACK: 'gemini-3.5-flash-lite' } });
 }
 
-function plainCacheStore() {
-  try { return getStore('plain-cache'); } catch { return null; }
-}
-
 export default async function handler(request, context) {
   const repo = new Repository(productionSql());
   const model = new GeminiAdapter({ repo });
   return createHandler({ repo, model, platformIp: context?.ip,
-    blobStore: getStore('private-documents'), plainModel: plainAdapter(repo),
-    plainCache: plainCacheStore() })(request);
+    // Personal rewrites stay in the browser session, not a shared persistent cache.
+    blobStore: getStore('private-documents'), plainModel: plainAdapter(repo) })(request);
 }

@@ -4,6 +4,12 @@ export const id = () => randomUUID();
 export const hash = (text) => createHash('sha256').update(text).digest('hex');
 export const PER_USER_DAILY_CAP_FRACTION = 0.5;
 export const FULL_VOICE_RESERVATION_MICROS = 30 * 200_000;
+export const UPLOAD_LIMITS = Object.freeze({ pendingBytes: 20_000_000, accountBytes: 100_000_000,
+  siteBytes: 1_000_000_000, accountFiles: 100, siteFiles: 10_000 });
+export const JOB_STORAGE_LIMITS = Object.freeze({ accountBytes: 100_000_000, siteBytes: 1_000_000_000,
+  accountActive: 100, siteActive: 1000, accountRecords: 10_000, siteRecords: 100_000 });
+export const SOURCE_STORAGE_LIMITS = Object.freeze({ accountBytes: 100_000_000, siteBytes: 1_000_000_000,
+  accountRecords: 1000, siteRecords: 10_000 });
 
 export function perUserDailyCapMicros(capMicros, minimumReservationMicros = FULL_VOICE_RESERVATION_MICROS) {
   return Math.min(capMicros, Math.max(
@@ -13,8 +19,19 @@ export function perUserDailyCapMicros(capMicros, minimumReservationMicros = FULL
 }
 
 export class Repository {
-  constructor(sql) {
+  constructor(sql, resourceLocked = false) {
     this.sql = sql;
+    this.resourceLocked = resourceLocked;
+  }
+
+  async withResourceLock(work) {
+    if (this.resourceLocked) return work(this);
+    if (typeof this.sql.transaction !== 'function') throw new Error('Transactional resource accounting is unavailable');
+    return this.sql.transaction(async (sql) => {
+      const lock = await sql('SELECT id FROM resource_guard WHERE id=1 FOR UPDATE');
+      if (!lock.length) throw new Error('Resource accounting is unavailable');
+      return work(new Repository(sql, true));
+    });
   }
 
   async userByName(name) {
@@ -58,9 +75,22 @@ export class Repository {
   }
 
   async addSource(owner, kind, title, text, parent = null, pageOffsets = []) {
-    return (await this.sql(`INSERT INTO sources(id,user_id,kind,title,text,content_hash,parent_source_id)
-      VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [id(), owner, kind, title, text, hash(text), parent]))[0];
+    return this.withResourceLock(async (repo) => {
+      const bytes = Buffer.byteLength(title, 'utf8') + Buffer.byteLength(text, 'utf8');
+      const totals = (await repo.sql(`SELECT
+        coalesce(sum(octet_length(title)+octet_length(text)) FILTER (WHERE user_id=$1),0)::bigint AS account_bytes,
+        coalesce(sum(octet_length(title)+octet_length(text)),0)::bigint AS site_bytes,
+        count(*) FILTER (WHERE user_id=$1)::int AS account_records,count(*)::int AS site_records FROM sources`, [owner]))[0];
+      if (Number(totals.account_bytes) + bytes > SOURCE_STORAGE_LIMITS.accountBytes ||
+          Number(totals.site_bytes) + bytes > SOURCE_STORAGE_LIMITS.siteBytes ||
+          totals.account_records >= SOURCE_STORAGE_LIMITS.accountRecords || totals.site_records >= SOURCE_STORAGE_LIMITS.siteRecords) {
+        const error = new Error('Saved source storage is full. Remove old source documents before adding more.');
+        error.status = 429; error.code = 'source_storage_full'; throw error;
+      }
+      return (await repo.sql(`INSERT INTO sources(id,user_id,kind,title,text,content_hash,parent_source_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [id(), owner, kind, title, text, hash(text), parent]))[0];
+    });
   }
 
   async latestResume(owner) {
@@ -73,18 +103,43 @@ export class Repository {
   }
 
   async initUpload(owner, sourceId, name, mimeType, byteSize, chunkCount) {
-    const uploadId = id();
-    const prefix = `${owner}/${uploadId}`;
-    await this.sql(`INSERT INTO uploads(id,user_id,source_id,chunk_count,byte_size,mime_type)
-      VALUES($1,$2,$3,$4,$5,$6)`, [uploadId, owner, sourceId, chunkCount, byteSize, mimeType]);
-    await this.sql(`UPDATE sources SET original_name=$3,mime_type=$4,blob_prefix=$5
-      WHERE user_id=$1 AND id=$2`, [owner, sourceId, name, mimeType, prefix]);
-    return { id: uploadId, prefix, chunkCount };
+    return this.withResourceLock(async (repo) => {
+      const totals = (await repo.sql(`SELECT
+        coalesce(sum(byte_size) FILTER (WHERE user_id=$1 AND status='pending'),0)::bigint AS pending,
+        coalesce(sum(byte_size) FILTER (WHERE user_id=$1),0)::bigint AS account,
+        coalesce(sum(byte_size),0)::bigint AS site,
+        count(*) FILTER (WHERE user_id=$1)::int AS account_files,count(*)::int AS site_files FROM uploads`, [owner]))[0];
+      if (Number(totals.pending) + byteSize > UPLOAD_LIMITS.pendingBytes ||
+          Number(totals.account) + byteSize > UPLOAD_LIMITS.accountBytes ||
+          Number(totals.site) + byteSize > UPLOAD_LIMITS.siteBytes ||
+          totals.account_files >= UPLOAD_LIMITS.accountFiles || totals.site_files >= UPLOAD_LIMITS.siteFiles) {
+        const error = new Error('Upload storage is full. Remove saved files before adding more.');
+        error.status = 429; error.code = 'upload_storage_full'; throw error;
+      }
+      if ((await repo.sourceUploads(owner, sourceId)).some((upload) => upload.status === 'ready')) {
+        const error = new Error('This source already has an original file.'); error.status = 400; throw error;
+      }
+      const uploadId = id();
+      const prefix = `${owner}/${uploadId}`;
+      await repo.sql(`INSERT INTO uploads(id,user_id,source_id,chunk_count,byte_size,mime_type)
+        VALUES($1,$2,$3,$4,$5,$6)`, [uploadId, owner, sourceId, chunkCount, byteSize, mimeType]);
+      await repo.sql(`UPDATE sources SET original_name=$3,mime_type=$4,blob_prefix=$5
+        WHERE user_id=$1 AND id=$2`, [owner, sourceId, name, mimeType, prefix]);
+      return { id: uploadId, prefix, chunkCount };
+    });
   }
 
-  async expirePendingUploads(owner, now = new Date()) {
-    return this.sql(`DELETE FROM uploads WHERE user_id=$1 AND status='pending' AND created_at<$2::timestamptz-interval '1 hour'
-      RETURNING id,chunk_count`, [owner, now]);
+  async expirePendingUploads(owner, now = new Date(), blobStore = null) {
+    return this.withResourceLock(async (repo) => {
+      const expired = await repo.sql(`SELECT id,chunk_count FROM uploads WHERE user_id=$1 AND status='pending'
+        AND created_at<$2::timestamptz-interval '1 hour'`, [owner, now]);
+      if (!blobStore && expired.length) throw new Error('Blob cleanup is unavailable');
+      for (const upload of expired) {
+        for (let part = 0; part < upload.chunk_count; part += 1) await blobStore.delete(`${owner}/${upload.id}/${part}`);
+        await repo.sql('DELETE FROM uploads WHERE user_id=$1 AND id=$2', [owner, upload.id]);
+      }
+      return expired;
+    });
   }
 
   async pendingUploadBytes(owner) {
@@ -212,12 +267,30 @@ export class Repository {
   }
 
   async createJob(owner, kind, input) {
+    return this.withResourceLock((repo) => repo.createJobLocked(owner, kind, input));
+  }
+
+  async createJobLocked(owner, kind, input) {
     const inputHash = hash(JSON.stringify(input));
     const existing = (await this.sql(`SELECT id,kind,status FROM model_jobs WHERE user_id=$1 AND kind=$2
       AND input_hash=$3 AND status IN ('queued','running') AND created_at>now()-interval '5 minutes'
       ORDER BY created_at DESC LIMIT 1`,
     [owner, kind, inputHash]))[0];
     if (existing) return existing;
+    const bytes = Number((await this.sql('SELECT octet_length($1::jsonb::text) AS bytes', [JSON.stringify(input)]))[0].bytes);
+    const totals = (await this.sql(`SELECT
+      coalesce(sum(octet_length(input_json::text)+coalesce(octet_length(result_json::text),0)) FILTER (WHERE user_id=$1),0)::bigint AS account_bytes,
+      coalesce(sum(octet_length(input_json::text)+coalesce(octet_length(result_json::text),0)),0)::bigint AS site_bytes,
+      count(*) FILTER (WHERE user_id=$1 AND status IN ('queued','running'))::int AS account_active,
+      count(*) FILTER (WHERE status IN ('queued','running'))::int AS site_active,
+      count(*) FILTER (WHERE user_id=$1)::int AS account_records,count(*)::int AS site_records FROM model_jobs`, [owner]))[0];
+    if (Number(totals.account_bytes) + bytes > JOB_STORAGE_LIMITS.accountBytes ||
+        Number(totals.site_bytes) + bytes > JOB_STORAGE_LIMITS.siteBytes ||
+        totals.account_active >= JOB_STORAGE_LIMITS.accountActive || totals.site_active >= JOB_STORAGE_LIMITS.siteActive ||
+        totals.account_records >= JOB_STORAGE_LIMITS.accountRecords || totals.site_records >= JOB_STORAGE_LIMITS.siteRecords) {
+      const error = new Error('Saved AI job storage is full. Finish queued work or ask the site operator to remove old jobs.');
+      error.status = 429; error.code = 'job_storage_full'; throw error;
+    }
     return (await this.sql(`INSERT INTO model_jobs(id,user_id,kind,input_json,input_hash)
       VALUES($1,$2,$3,$4::jsonb,$5) RETURNING id,kind,status`,
     [id(), owner, kind, JSON.stringify(input), inputHash]))[0];
@@ -258,10 +331,25 @@ export class Repository {
   }
 
   async finishJob(owner, jobId, result, errorCode = null) {
-    await this.sql(`UPDATE model_jobs SET status=$3,result_json=$4::jsonb,error_code=$5,
-      input_json=CASE WHEN $5::text IS NULL THEN '{}'::jsonb ELSE input_json END,finished_at=now()
-      WHERE user_id=$1 AND id=$2 AND status='running'`,
-    [owner, jobId, errorCode ? 'failed' : 'done', JSON.stringify(result), errorCode]);
+    await this.withResourceLock(async (repo) => {
+      const job = (await repo.sql("SELECT input_json FROM model_jobs WHERE user_id=$1 AND id=$2 AND status='running'", [owner, jobId]))[0];
+      if (!job) return;
+      const serialized = JSON.stringify(result);
+      const bytes = Number((await repo.sql('SELECT octet_length($1::jsonb::text)+octet_length($2::jsonb::text) AS bytes',
+        [serialized, errorCode ? JSON.stringify(job.input_json) : '{}']))[0].bytes);
+      const totals = (await repo.sql(`SELECT
+        coalesce(sum(octet_length(input_json::text)+coalesce(octet_length(result_json::text),0)) FILTER (WHERE user_id=$1),0)::bigint AS account_bytes,
+        coalesce(sum(octet_length(input_json::text)+coalesce(octet_length(result_json::text),0)),0)::bigint AS site_bytes
+        FROM model_jobs WHERE id<>$2`, [owner, jobId]))[0];
+      if (Number(totals.account_bytes) + bytes > JOB_STORAGE_LIMITS.accountBytes || Number(totals.site_bytes) + bytes > JOB_STORAGE_LIMITS.siteBytes) {
+        await repo.sql("UPDATE model_jobs SET status='failed',input_json='{}'::jsonb,result_json=NULL,error_code='job_storage_full',finished_at=now() WHERE user_id=$1 AND id=$2 AND status='running'", [owner, jobId]);
+        return;
+      }
+      await repo.sql(`UPDATE model_jobs SET status=$3,result_json=$4::jsonb,error_code=$5,
+        input_json=CASE WHEN $5::text IS NULL THEN '{}'::jsonb ELSE input_json END,finished_at=now()
+        WHERE user_id=$1 AND id=$2 AND status='running'`,
+      [owner, jobId, errorCode ? 'failed' : 'done', serialized, errorCode]);
+    });
   }
 
   async retryJob(owner, jobId) {
@@ -806,14 +894,21 @@ export class Repository {
     [owner, slotId, state, proposalFactId, reason]))[0] ?? null;
   }
 
-  async reserve(bucket, micros, capMicros, key, now = new Date(), owner = null, userCapMicros = null) {
+  async reserve(bucket, micros, capMicros, key, now = new Date(), owner = null, userCapMicros = null, ttlMs = 15 * 60_000) {
+    if (![micros, capMicros, ttlMs].every((value) => Number.isSafeInteger(value) && value > 0) ||
+        (userCapMicros !== null && (!Number.isSafeInteger(userCapMicros) || userCapMicros <= 0))) {
+      throw new Error('Invalid spend reservation');
+    }
+    return this.withResourceLock((repo) => repo.reserveLocked(bucket, micros, capMicros, key, now, owner, userCapMicros, ttlMs));
+  }
+
+  async reserveLocked(bucket, micros, capMicros, key, now, owner, userCapMicros, ttlMs) {
     const day = now.toISOString().slice(0, 10);
     const existing = (await this.sql('SELECT id FROM spend_reservations WHERE idempotency_key=$1', [key]))[0];
     if (existing) return existing.id;
-    const expired = await this.sql(`UPDATE spend_reservations SET state='expired'
-      WHERE state='reserved' AND expires_at<=$1 RETURNING utc_date,estimated_micros`, [now]);
-    for (const row of expired) await this.sql(`UPDATE spend_days SET reserved_micros=GREATEST(0,reserved_micros-$2)
-      WHERE utc_date=$1`, [row.utc_date, row.estimated_micros]);
+    // A lost response can still be billed. Keep uncertain holds charged for
+    // their UTC day until usage or a definitive no-charge result settles them.
+    // The next day's independent bucket restores capacity without overspend.
     await this.sql(`INSERT INTO spend_days(utc_date,cap_micros) VALUES($1,$2)
       ON CONFLICT(utc_date) DO UPDATE SET cap_micros=EXCLUDED.cap_micros`, [day, capMicros]);
     if (owner && userCapMicros !== null) {
@@ -826,9 +921,9 @@ export class Repository {
       WHERE utc_date=$1 AND reserved_micros+settled_micros+$2<=cap_micros
       RETURNING utc_date
     ) INSERT INTO spend_reservations(id,utc_date,bucket,estimated_micros,idempotency_key,expires_at,user_id)
-      SELECT $3,utc_date,$4,$2,$5,$6::timestamptz+interval '15 minutes',$7::uuid FROM taken
+      SELECT $3,utc_date,$4,$2,$5,$6::timestamptz+($8::bigint * interval '1 millisecond'),$7::uuid FROM taken
       ON CONFLICT(idempotency_key) DO NOTHING RETURNING id`,
-    [day, micros, id(), bucket, key, now, owner]);
+    [day, micros, id(), bucket, key, now, owner, ttlMs]);
     return rows[0]?.id ?? null;
   }
 
@@ -852,8 +947,10 @@ export class Repository {
       'facts', 'source_spans', 'job_hunt_history', 'workspaces', 'sources', 'auth_sessions',
     ];
     for (const table of tables) {
-      try { await this.sql(`DELETE FROM ${table} WHERE user_id=$1`, [owner]); }
-      catch (error) { if (error.code !== '42P01') throw error; }
+      // Catching undefined_table inside a transaction leaves that transaction aborted.
+      // Check optional historical tables before issuing the destructive statement.
+      if (!(await this.sql('SELECT to_regclass($1) AS name', [table]))[0]?.name) continue;
+      await this.sql(`DELETE FROM ${table} WHERE user_id=$1`, [owner]);
     }
     await this.sql('DELETE FROM users WHERE id=$1', [owner]);
   }
@@ -872,16 +969,21 @@ export class Repository {
     // These tables don't retain fact/source provenance. Clearing all owner-scoped derived
     // payloads is deliberately broader than deletion so source wording cannot survive.
     for (const statement of [
-      `UPDATE model_jobs SET input_json='{}'::jsonb,result_json=NULL,error_code='source_deleted' WHERE user_id=$1`,
+      `UPDATE model_jobs SET input_json='{}'::jsonb,result_json=NULL,status='failed',finished_at=now(),error_code='source_deleted' WHERE user_id=$1`,
       `UPDATE prep_pack_sections SET content_json=NULL,status='stale',error_code='source_deleted',updated_at=now() WHERE user_id=$1`,
       `UPDATE story_digs SET scene_text=NULL,reflection=NULL,status='started',confirmed_at=NULL WHERE user_id=$1`,
     ]) {
-      try { await this.sql(statement, [owner]); }
-      catch (error) { if (error.code !== '42P01') throw error; }
+      const table = statement.split(/\s+/)[1]; // fixed statements above, never user input
+      if (!(await this.sql('SELECT to_regclass($1) AS name', [table]))[0]?.name) continue;
+      await this.sql(statement, [owner]);
     }
   }
 
   async deleteFact(owner, factId) {
+    return this.withResourceLock((repo) => repo.deleteFactLocked(owner, factId));
+  }
+
+  async deleteFactLocked(owner, factId) {
     await this.clearDerivedText(owner);
     await this.purgeGenerated(owner);
     const ids = await this.sql(`WITH RECURSIVE descendants AS (
@@ -901,6 +1003,10 @@ export class Repository {
   }
 
   async deleteSource(owner, sourceId) {
+    return this.withResourceLock((repo) => repo.deleteSourceLocked(owner, sourceId));
+  }
+
+  async deleteSourceLocked(owner, sourceId) {
     const source = await this.source(owner, sourceId);
     if (!source) return false;
     const captures = await this.sql('SELECT stumped_json FROM real_interviews WHERE user_id=$1 AND source_id=$2',
@@ -945,6 +1051,7 @@ export class Repository {
 
   // Guest voice: bookkeeping only, never transcript content.
   async claimGuestVoicePool(minutes, dailyLimit) {
+    if (!Number.isFinite(minutes) || !Number.isFinite(dailyLimit) || minutes <= 0 || dailyLimit <= 0 || minutes > dailyLimit) return null;
     const day = new Date().toISOString().slice(0, 10);
     const rows = await this.sql(`INSERT INTO guest_voice_pool(utc_date,reserved_minutes) VALUES($1,$2)
       ON CONFLICT (utc_date) DO UPDATE SET reserved_minutes=guest_voice_pool.reserved_minutes+$2

@@ -33,6 +33,7 @@ async function newPage({ user = null, seed = {}, logoutFails = false } = {}) {
     if (url.pathname !== '/api') return route.continue();
     const op = url.searchParams.get('op'); calls.push(op);
     if (op === 'session') return route.fulfill({ json: { user, voiceAvailable: false } });
+    if (op === 'start') return route.fulfill({ status: 503, json: { message: 'Practice start unavailable. Please retry.' } });
     if (op === 'logout') {
       if (logoutFails) return route.fulfill({ status: 503, json: { message: 'Sign-out unavailable. Please retry.' } });
       user = null; return route.fulfill({ json: { result: { ok: true } } });
@@ -86,8 +87,19 @@ try {
     assert.equal(calls.includes('transcribe_voice'), false, 'previous account audio must not reach transcription after logout');
     await context.close();
   }
+  {
+    const { context, page } = await newPage({ user: { id: 'owner-a', username: 'owner-a' }, seed: { 'interview-coach-workspace': 'workspace-a' } });
+    await page.waitForSelector('#ledger:not([hidden])');
+    await page.locator('#ledger-practice').click();
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('#start-interview').click();
+    await page.waitForFunction(() => document.querySelector('#message').textContent.includes('Practice start unavailable'));
+    assert.equal(await page.locator('#start-interview strong').textContent(), 'Type');
+    assert.equal(await page.locator('#start-interview span').textContent(), 'Answer in writing at your own pace.');
+    await context.close();
+  }
   assert.deepEqual(errors, []);
-  console.log('PASS: corrupted storage recovery, failed logout stays honest, logout stops microphone and discards stale audio; no page errors.');
+  console.log('PASS: corrupted storage recovery, failed logout stays honest, logout stops microphone and discards stale audio, failed starts preserve accessible controls; no page errors.');
 } finally {
   await browser.close();
   await new Promise((done) => server.close(done));
