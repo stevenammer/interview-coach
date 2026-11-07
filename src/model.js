@@ -17,7 +17,9 @@ export function providerFor(env) {
 export const MODEL_CONFIG = Object.freeze({
   primary: 'gemini-3.8-flash',
   fallback: 'gemini-3.5-flash-lite',
-  maximumUsdPerAttempt: 0.25,
+  minimumReservationUsd: 0.25,
+  maximumUsdPerAttempt: 0.25, // legacy minimum reservation, not a provider billing cap
+  maxInputBytes: 4_000_000,
   maxOutputTokens: 8192,
   thinkingBudget: 0,
   timeoutMs: 25000,
@@ -96,14 +98,14 @@ export class GeminiAdapter {
           // Shape only, never content: enough to tell a cut-off reply from a schema miss in the function logs.
           try {
             const raw = JSON.parse(result.text);
-            console.error('[model] invalid output', task, model, JSON.stringify({ reason: 'schema', keys: Object.keys(raw ?? {}).slice(0, 8),
+            console.error('[model] invalid output', task, model, JSON.stringify({ reason: 'schema', keyCount: Object.keys(raw ?? {}).length,
               sections: Array.isArray(raw?.sections) ? raw.sections.map((section) => ({ heading: typeof section?.heading, lines: Array.isArray(section?.lines) ? section.lines.length : null,
                 badLine: Array.isArray(section?.lines) ? section.lines.filter((line) => typeof line?.text !== 'string').length : null })).slice(0, 12) : null }));
           } catch { console.error('[model] invalid output', task, model, JSON.stringify({ reason: 'json', length: String(result.text ?? '').length, tail: String(result.text ?? '').slice(-1) })); }
           lastError = new ModelOutputError(task);
           break; // malformed output gets one repair call, not a model switch
         } catch (error) {
-          if (error.code === 'spend_cap_reached' || error.code === 'accounting_unavailable') throw error;
+          if (['spend_cap_reached', 'accounting_unavailable', 'model_pricing_unavailable', 'model_input_too_large'].includes(error.code)) throw error;
           lastError = error;
           if (!error.retryable) break;
         }
@@ -118,7 +120,7 @@ export class GeminiAdapter {
     throw error;
   }
 
-  async transcribe(base64, mimeType) {
+  async transcribe(base64, mimeType, owner = null) {
     if (typeof base64 !== 'string' || base64.length > 2800000 ||
       !['audio/webm', 'audio/mp4', 'audio/ogg'].includes(mimeType)) {
       throw new Error('Unsupported or oversized audio note');
@@ -129,18 +131,18 @@ export class GeminiAdapter {
       try {
         const result = await this.call(model, 'transcribe_voice',
           'Transcribe this interview voice note faithfully. Return JSON {"text":"..."}. Do not infer words you cannot hear.',
-          { mimeType, data: base64 });
+          { mimeType, data: base64 }, MODEL_CONFIG.timeoutMs, owner);
         const data = parseStructured(result.text, (value) => value && isText(value.text, 12000));
         if (data) return data.text;
       } catch (error) {
-        if (error.code === 'spend_cap_reached' || error.code === 'accounting_unavailable') throw error;
+        if (['spend_cap_reached', 'accounting_unavailable', 'model_pricing_unavailable', 'model_input_too_large'].includes(error.code)) throw error;
         if (!error.retryable) break;
       }
     }
     throw new ModelOutputError('transcribe_voice');
   }
 
-  async readImage(base64, mimeType) {
+  async readImage(base64, mimeType, owner = null) {
     if (typeof base64 !== 'string' || base64.length > 2800000 ||
       !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
       throw new Error('Unsupported or oversized image');
@@ -151,11 +153,11 @@ export class GeminiAdapter {
       try {
         const result = await this.call(model, 'read_image',
           'This is a screenshot or photo of a job posting or a resume. Copy all of its text exactly as written, in reading order, keeping headings and bullets on their own lines. Leave out app chrome like buttons, menus, and ads. Do not summarize, fix, or add anything. If there is no readable text, return an empty string. Return JSON {"text":"..."}.',
-          { mimeType, data: base64 });
+          { mimeType, data: base64 }, MODEL_CONFIG.timeoutMs, owner);
         const data = parseStructured(result.text, (value) => value && typeof value.text === 'string' && value.text.length <= 12000);
         if (data) return data.text.trim();
       } catch (error) {
-        if (error.code === 'spend_cap_reached' || error.code === 'accounting_unavailable') throw error;
+        if (['spend_cap_reached', 'accounting_unavailable', 'model_pricing_unavailable', 'model_input_too_large'].includes(error.code)) throw error;
         if (!error.retryable) break;
       }
     }
@@ -177,7 +179,30 @@ export class GeminiAdapter {
       error.code = 'spend_cap_reached';
       throw error;
     }
-    const micros = Math.ceil(MODEL_CONFIG.maximumUsdPerAttempt * 1e6);
+    const requestBody = JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt },
+        ...(inlineAudio ? [{ inlineData: inlineAudio }] : [])] }],
+      generationConfig: {
+        responseMimeType: 'application/json', maxOutputTokens: MODEL_CONFIG.maxOutputTokens,
+        thinkingConfig: thinkingConfigFor(model),
+      },
+    });
+    const inputBytes = Buffer.byteLength(requestBody, 'utf8');
+    if (inputBytes > MODEL_CONFIG.maxInputBytes) {
+      const error = new Error('Model input is too large. Use a shorter document or fewer facts.');
+      error.code = 'model_input_too_large';
+      throw error;
+    }
+    // A byte-per-token upper estimate intentionally over-reserves multimodal data.
+    // Reserve output/thought tokens up to maxOutputTokens, then reconcile actual usage.
+    const estimate = usageMicros(model, { promptTokenCount: inputBytes,
+      candidatesTokenCount: MODEL_CONFIG.maxOutputTokens, thoughtsTokenCount: 0 });
+    if (estimate === null) {
+      const error = new Error('Model pricing is not configured. Choose a model with a reviewed rate in PRICE_PER_MILLION_USD.');
+      error.code = 'model_pricing_unavailable';
+      throw error;
+    }
+    const micros = Math.max(Math.ceil(MODEL_CONFIG.minimumReservationUsd * 1e6), estimate);
     let reservation;
     try {
       const capMicros = Math.floor(cap * 1e6);
@@ -206,16 +231,7 @@ export class GeminiAdapter {
       const response = await this.fetch(`${provider.endpoint}/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': provider.key },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt },
-            ...(inlineAudio ? [{ inlineData: inlineAudio }] : [])] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            maxOutputTokens: MODEL_CONFIG.maxOutputTokens,
-            // Thinking tokens count against maxOutputTokens and truncated the JSON in live testing.
-            thinkingConfig: thinkingConfigFor(model),
-          },
-        }),
+        body: requestBody,
         signal: controller.signal,
       });
       if (!response.ok) {

@@ -31,8 +31,10 @@ export function unsupportedNumbers(text, citedQuotes) {
 }
 
 export const documentSchema = (value) => value && Array.isArray(value.sections) && value.sections.length >= 1 &&
-  value.sections.length <= 12 && value.sections.every((section) => section && (typeof section.heading === 'string' || section.heading == null) &&
+  value.sections.length <= 12 && value.sections.every((section) => section && ((typeof section.heading === 'string' && section.heading.length <= 200) || section.heading == null) &&
     Array.isArray(section.lines) && section.lines.length <= 60 && section.lines.every((line) =>
       line && typeof line.text === 'string' && line.text.length <= 1200 &&
-      Array.isArray(line.factIds ?? []))) &&
-  Array.isArray(value.gaps ?? []);
+      Array.isArray(line.factIds ?? []) && (line.factIds ?? []).length <= 12 &&
+      (line.factIds ?? []).every((id) => typeof id === 'string' && id.length > 0 && id.length <= 100))) &&
+  Array.isArray(value.gaps ?? []) && (value.gaps ?? []).length <= 10 &&
+  (value.gaps ?? []).every((gap) => typeof gap === 'string' && gap.length > 0 && gap.length <= 500);

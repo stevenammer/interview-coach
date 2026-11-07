@@ -401,7 +401,8 @@ export class CoachService {
     if (previous && previous.input_hash !== input.inputHash) {
       await this.repo.markPrepSectionsStale(owner, pack.id, input.inputHash);
     }
-    const accepted = input.facts.filter((fact) => fact.review_state === 'accepted' && fact.lifecycle === 'active');
+    const evidence = await this.safeCandidateEvidence(owner, workspaceId);
+    const accepted = evidence.accepted;
     const textOf = (fact) => fact.verbatim_quote || fact.display_text;
     const contactPredicate = /^(?:location|phone|email|contact)$/i;
     const pending = input.facts.filter((fact) => fact.review_state === 'pending' && !contactPredicate.test(fact.predicate ?? ''));
@@ -549,7 +550,8 @@ export class CoachService {
       const numericMismatch = mismatchedNumbers(value, proposal.quote);
       const factId = await this.repo.addFact(owner, {
         workspaceId, domain: kind === 'jd' ? 'job' : 'candidate', sourceId: source.id,
-        ...proposal, value, displayText: proposal.quote, start, end: start + proposal.quote.length,
+        subject: proposal.subject, predicate: proposal.predicate, quote: proposal.quote,
+        value, displayText: proposal.quote, start, end: start + proposal.quote.length,
         status: kind === 'transcript' || numericMismatch ? 'draft' : 'document',
         qualifiers: numericMismatch ? { numericMismatch: true } : {},
         reviewState: 'pending', proposedBy: 'model',
@@ -1031,9 +1033,9 @@ export class CoachService {
     if (!workspace) throw new InputError('Workspace not found', 404);
     const delta = workspace.interview_date ? Date.parse(workspace.interview_date) - now : Infinity;
     const cram = delta >= 0 && delta <= 48 * 60 * 60 * 1000;
-    const facts = await this.repo.facts(owner, workspaceId);
-    const usable = new Set(facts.filter((fact) => fact.review_state === 'accepted' &&
-      fact.lifecycle === 'active').map((fact) => fact.id));
+    const evidence = await this.safeCandidateEvidence(owner, workspaceId);
+    const facts = evidence.facts;
+    const usable = new Set(evidence.accepted.map((fact) => fact.id));
     const storyFactIds = new Set(facts.filter((fact) => !identityOrBoundaryFact(fact)).map((fact) => fact.id));
     const cards = (await this.repo.drillCards(owner, workspaceId)).filter((card) =>
       !/^Recall the .* beat$/.test(card.cue) && card.fact_ids.every((id) => usable.has(id)) &&
@@ -1097,7 +1099,8 @@ export class CoachService {
     if (!bounded(answer, 4000)) throw new InputError('Give an answer under 4,000 characters.');
     const card = await this.repo.drillCard(owner, cardId);
     if (!card || card.status !== 'active') throw new InputError('Beat card not found', 404);
-    const facts = await this.repo.facts(owner, card.workspace_id);
+    const evidence = await this.safeCandidateEvidence(owner, card.workspace_id);
+    const facts = evidence.accepted;
     const beats = card.fact_ids.map((id) => facts.find((fact) => fact.id === id));
     if (beats.some((fact) => !fact || fact.review_state !== 'accepted' || fact.lifecycle !== 'active')) {
       throw new InputError('This beat needs refreshed evidence.');
@@ -1105,6 +1108,9 @@ export class CoachService {
     const result = await this.model.generate('grade_beats',
       `Grade which factual beats the candidate recalled by meaning, not exact wording. Do not write a finished answer. Return JSON {"hitIds":[],"missedIds":[],"note":"one concise cue"}. Answer:\n${answer}\nBeats:\n${JSON.stringify(beats.map((fact) => ({ id: fact.id, quote: fact.verbatim_quote })))}`,
       drillGradeSchema);
+    if ((await this.safeCandidateEvidence(owner, card.workspace_id)).signature !== evidence.signature) {
+      throw new InputError('Candidate facts changed while grading. Refresh and try again.', 409);
+    }
     const valid = new Set(card.fact_ids);
     const hits = [...new Set(result.data.hitIds)].filter((id) => valid.has(id));
     const misses = card.fact_ids.filter((id) => !hits.includes(id));
@@ -1438,7 +1444,9 @@ export class CoachService {
         const citedUnknown = (line.factIds ?? []).length !== ids.length;
         return { text, type: line.type, factIds: ids, sources: quotes,
           check: badNumbers.length ? `Check: ${badNumbers.join(', ')} isn't in your confirmed facts.` :
-            citedUnknown ? 'Check: this line leaned on something you haven\'t confirmed.' : null };
+            citedUnknown ? 'Check: this line leaned on something you haven\'t confirmed.' :
+              !ids.length && !/^(?:dear hiring (?:team|manager)[,:]?|thank you for (?:your time(?: and consideration)?|considering my application)[.!]?|sincerely[,]?|best regards[,]?)$/i.test(text.trim())
+                ? 'Check: this line has no confirmed source. Review it before use.' : null };
       }),
     }));
     if (kind === 'resume') {
@@ -1459,7 +1467,7 @@ export class CoachService {
     const stored = suppliedRewrite ? null : await this.repo.debrief(owner, interviewId);
     const rewrite = suppliedRewrite ?? stored?.rewrite ?? stored?.report?.rewrite;
     const slots = suppliedSlots ?? await this.repo.rewriteSlots(owner, interviewId);
-    const facts = await this.repo.facts(owner, interview.workspace_id);
+    const facts = (await this.safeCandidateEvidence(owner, interview.workspace_id)).accepted;
     const factById = new Map(facts.map((fact) => [fact.id, fact]));
     const safeStillValid = stored?.rewrite_status !== 'invalidated' &&
       (rewrite?.claims ?? []).every((claim) => (claim.factIds ?? []).every((factId) =>

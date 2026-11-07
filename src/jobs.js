@@ -3,7 +3,22 @@ import { CoachService } from './service.js';
 export async function runModelJob(repo, model, owner, jobId) {
   const job = await repo.claimJob(owner, jobId);
   if (!job) return false;
-  const service = new CoachService(repo, model, owner);
+  // Source deletion can invalidate an already claimed job while a provider is
+  // responding. Recheck before accepting any generated content for persistence.
+  const activeJob = async () => {
+    if ((await repo.job(owner, jobId))?.status !== 'running') {
+      const error = new Error('This job was cancelled because its source changed.');
+      error.code = 'source_deleted';
+      throw error;
+    }
+  };
+  const guardedModel = { async generate(...args) {
+    await activeJob();
+    const result = await model.generate(...args);
+    await activeJob();
+    return result;
+  } };
+  const service = new CoachService(repo, guardedModel, owner);
   try {
     let result;
     if (job.kind === 'paste') result = await service.paste(owner, job.input_json);

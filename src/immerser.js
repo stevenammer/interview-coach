@@ -72,7 +72,10 @@ export function normalizeImmersion(raw, { jdId, jdText, companyFacts = [] }) {
   scenes.forEach((scene, index) => { while (seen.has(scene.id)) scene.id = `${scene.id}-${index + 1}`; seen.add(scene.id); });
   scenes.forEach((scene, index) => {
     const ids = new Set();
-    scene.choices.forEach((choice, choiceIndex) => { if (ids.has(choice.id)) choice.id = `${choice.id}-${choiceIndex + 1}`; ids.add(choice.id);
+    scene.choices.forEach((choice) => {
+      const base = choice.id; let suffix = 2;
+      while (ids.has(choice.id)) choice.id = `${base}-${suffix++}`;
+      ids.add(choice.id);
       choice.nextSceneId = index === scenes.length - 1 ? 'end' : scenes[index + 1].id; });
   });
   return { scenes };
