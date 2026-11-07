@@ -1,5 +1,4 @@
-import { extractDocument } from './documents.js';
-import { classifyImportFile, extractImportDocument } from './vendor/file-import.bundle.js';
+import { classifyImportFile, extractImportDocument, extractDocument } from './vendor/file-import.bundle.js';
 import { createPlainEnglish, bindPlainToggle } from './plain-ui.js';
 import { createDocx, createPdf, documentFilename, downloadBytes } from './vendor/document-export.bundle.js';
 import { createInterviewCache } from './interview-cache.js';
@@ -11,6 +10,7 @@ import { HUNT_STATUSES, CLOSED_HUNT_STATUSES, huntSummary, nextStepOverdue, jobH
 import { createPendingJobRecovery } from './job-recovery.js';
 import { waitForModelJob } from './model-job-poll.js';
 import { createSampleGuest } from './sample-workspace.js';
+import { readStoredObject, readGuestState, originalExtension, dateTimeInputValue } from './browser-state.js';
 
 const $ = (id) => document.getElementById(id);
 const sections = ['landing', 'start', 'auth', 'paste', 'ledger', 'practice', 'library', 'workspaces', 'writer', 'prep-pack', 'immerser', 'interview', 'voice-interview', 'story-dig', 'drills', 'real-capture', 'debrief'];
@@ -30,7 +30,7 @@ let guest = false;
 let state = {};
 let workspaceId = sessionStorage.getItem('interview-coach-workspace');
 let interviewId = sessionStorage.getItem('interview-coach-interview');
-let pendingJob = JSON.parse(sessionStorage.getItem('interview-coach-job') || 'null');
+let pendingJob = readStoredObject(sessionStorage, 'interview-coach-job');
 let pendingJobRecovery;
 let currentUser = null;
 let sessionEpoch = 0;
@@ -591,6 +591,7 @@ function identity() {
   const nextIdentity = currentUser?.id ?? (guest ? 'guest' : null);
   if (nextIdentity !== proofIdentity) {
     sessionEpoch += 1;
+    cancelSessionMedia();
     clearProofShelf();
     $('fact-list').replaceChildren();
     $('bank-summary').textContent = '';
@@ -628,7 +629,7 @@ function applySessionDetails(body) {
 }
 
 function restoreGuestDrafts() {
-  const draft = JSON.parse(sessionStorage.getItem(guestDraftKey) || '{}');
+  const draft = readStoredObject(sessionStorage, guestDraftKey, {});
   $('job-label').value = draft.jobLabel ?? '';
   $('resume').value = draft.resume ?? '';
   $('jd').value = draft.jd ?? '';
@@ -711,7 +712,7 @@ function renderLedger(facts, { keepScroll = false } = {}) {
           const url = URL.createObjectURL(new Blob(chunks, { type: upload.mimeType }));
           const link = document.createElement('a');
           link.href = url;
-          link.download = `${fact.source_title}.${upload.mimeType === 'application/pdf' ? 'pdf' : 'docx'}`;
+          link.download = `${fact.source_title}.${originalExtension(upload.mimeType)}`;
           link.click();
           setTimeout(() => URL.revokeObjectURL(url), 30000);
         }));
@@ -1031,7 +1032,7 @@ function restoreCachedInterview() {
       plain.plainNode('p', turn.text, 'question') : node('p', turn.text));
     $('transcript').append(article);
   }
-  const savedFocus = JSON.parse(sessionStorage.getItem('interview-coach-focus') || 'null');
+  const savedFocus = readStoredObject(sessionStorage, 'interview-coach-focus');
   showInterviewFocus(savedFocus?.interviewId === interviewId ? savedFocus.focus : null);
   $('answer-form').hidden = cached.finished === true;
   if ($('answer-form').hidden) {
@@ -1374,6 +1375,7 @@ async function renderWorkspaces() {
   $('listing-work-mode').value = selected?.listing_work_mode ?? 'unspecified';
   $('role-title').value = selected?.role_title ?? selected?.label ?? '';
   $('company-name').value = selected?.company_name ?? '';
+  $('interview-date').value = dateTimeInputValue(selected?.interview_date);
   const grouped = new Map(HUNT_STATUSES.map((status) => [status, []]));
   for (const workspace of workspaces) grouped.get(workspace.hunt_status ?? 'saved').push(workspace);
   for (const status of HUNT_STATUSES) {
@@ -1690,7 +1692,7 @@ $('try-guest').addEventListener('click', () => {
   message('');
   if (currentUser) { show('paste'); return; }
   guest = true;
-  state = JSON.parse(sessionStorage.getItem(guestKey) || '{}');
+  state = readGuestState(sessionStorage, guestKey) ?? {};
   if (state.workspaces?.some((item) => item.public_summary)) {
     state = {};
     sessionStorage.removeItem(guestKey);
@@ -1702,15 +1704,13 @@ $('try-guest').addEventListener('click', () => {
   restoreGuestDrafts();
   show('paste');
 });
-$('end-session').addEventListener('click', async () => {
+$('end-session').addEventListener('click', (event) => run(event.currentTarget, async () => {
+  // A network failure must not pretend the server's session cookie was revoked.
+  if (!guest) await api('logout');
   interviewCache()?.clearNamespace();
   clearInterviewCoachLocalStorage();
-  if (guest) {
-    sessionStorage.removeItem(guestKey);
-    sessionStorage.removeItem(guestCacheSessionKey);
-  } else {
-    try { await api('logout'); } catch { /* Local session state still clears. */ }
-  }
+  sessionStorage.removeItem(guestKey);
+  sessionStorage.removeItem(guestCacheSessionKey);
   sessionStorage.removeItem('interview-coach-workspace');
   sessionStorage.removeItem('interview-coach-interview');
   sessionStorage.removeItem('interview-coach-job');
@@ -1718,7 +1718,7 @@ $('end-session').addEventListener('click', async () => {
   sessionStorage.removeItem(guestAnswerKey);
   guest = false; state = {}; workspaceId = null; interviewId = null; pendingJob = null; currentUser = null;
   identity(); show('landing');
-});
+}));
 pendingJobRecovery = createPendingJobRecovery({
   button: $('retry-pending-job'),
   runAction: (button, task) => run(button, task),
@@ -1778,12 +1778,16 @@ async function shrinkImage(file) {
 
 // Screenshots become text in the box next to the picker, one image at a time, so she can fix any misread before it's used.
 async function readScreenshots(files, textareaId) {
+  const screenshotEpoch = sessionEpoch;
   const box = $(textareaId);
   const found = [];
   for (const [index, file] of files.entries()) {
     message(`Reading screenshot ${index + 1} of ${files.length}…`);
     try {
-      const reply = await api('read_image', { base64: await shrinkImage(file), mimeType: 'image/jpeg' });
+      const base64 = await shrinkImage(file);
+      if (screenshotEpoch !== sessionEpoch) return;
+      const reply = await api('read_image', { base64, mimeType: 'image/jpeg' });
+      if (screenshotEpoch !== sessionEpoch) return;
       if (reply.text) found.push(reply.text);
       else message(`Screenshot ${index + 1} had no readable text.`);
     } catch (error) { message(`Couldn't read screenshot ${index + 1}: ${error.message}`); }
@@ -1966,7 +1970,6 @@ function startTypedInterview(button) { return run(button, async () => {
   interviewId = result.interview.id;
   sessionStorage.setItem('interview-coach-interview', interviewId);
   interviewCache()?.clear(interviewId);
-  interviewCache()?.clear(interviewId);
   $('transcript').replaceChildren();
   $('between-answer-coaching').replaceChildren();
   $('interview-heading').textContent = $('practice-mode').value === 'coach' ? 'Coach mode' : 'Mock interview';
@@ -1990,9 +1993,10 @@ function stopVoice() {
 }
 
 $('start-voice').addEventListener('click', (event) => run(event.currentTarget, async () => {
-  const limit = guest ? 'up to five minutes' : 'up to 30 minutes';
+  const limit = `up to ${guest ? guestVoiceLimits?.maxMinutes ?? 5 : 30} minutes`;
   const privacy = guest ? ' Retell keeps a copy for one day.' : '';
   if (!window.confirm(`Start a live voice mock interview? This uses a paid call for ${limit}.${privacy} Choose Cancel to use text practice.`)) return;
+  const voiceEpoch = sessionEpoch;
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -2000,7 +2004,9 @@ $('start-voice').addEventListener('click', (event) => run(event.currentTarget, a
     message('Microphone access was denied or unavailable. Text practice is ready below.');
     return;
   } finally { stream?.getTracks().forEach((track) => track.stop()); }
+  if (voiceEpoch !== sessionEpoch) return;
   const { RetellWebClient } = await import('/vendor/retell-client.js');
+  if (voiceEpoch !== sessionEpoch) return;
   const result = await api('voice_start', { workspaceId, persona: $('persona').value,
     difficulty: Number($('difficulty').value), practiceMode: $('practice-mode').value,
     ...($('plain-voice').checked ? { plainEnglish: true } : {}) });
@@ -2133,15 +2139,18 @@ $('dig-speak').addEventListener('click', () => {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) { message('Speech input is unavailable in this browser. Type the scene instead.'); return; }
   const recognition = new Recognition();
+  speechInput?.abort();
+  speechInput = recognition;
+  const speechEpoch = sessionEpoch;
   recognition.lang = document.documentElement.lang || 'en-US';
-  recognition.onresult = (event) => { $('dig-scene').value += `${$('dig-scene').value ? ' ' : ''}${event.results[0][0].transcript}`; };
+  recognition.onresult = (event) => { if (speechEpoch !== sessionEpoch) return; $('dig-scene').value += `${$('dig-scene').value ? ' ' : ''}${event.results[0][0].transcript}`; };
   recognition.onerror = () => message('Speech input stopped. You can type or try again.');
   recognition.start();
 });
 $('interview-date-form').addEventListener('submit', (event) => {
   event.preventDefault();
   run(event.submitter, async () => {
-    await api('interview_date', { workspaceId, date: $('interview-date').value || null });
+    await api('interview_date', { workspaceId, date: $('interview-date').value ? new Date($('interview-date').value).toISOString() : null });
     message('Interview date saved.');
   });
 });
@@ -2280,6 +2289,23 @@ $('real-capture-form').addEventListener('submit', (event) => {
 });
 let voiceRecorder = null;
 let voiceStopTimer = null;
+let voiceCaptureStream = null;
+let speechInput = null;
+function cancelSessionMedia() {
+  clearTimeout(voiceStopTimer);
+  if (voiceRecorder) {
+    voiceRecorder.onstop = null;
+    if (voiceRecorder.state === 'recording') voiceRecorder.stop();
+    voiceRecorder = null;
+  }
+  voiceCaptureStream?.getTracks().forEach((track) => track.stop());
+  voiceCaptureStream = null;
+  if (speechInput) { speechInput.onresult = null; speechInput.abort(); speechInput = null; }
+  if (voiceClient) stopVoice();
+  guestVoice = null;
+  $('capture-speak').textContent = 'Record voice note';
+}
+
 $('capture-speak').addEventListener('click', async () => {
   if (voiceRecorder?.state === 'recording') {
     clearTimeout(voiceStopTimer);
@@ -2291,8 +2317,12 @@ $('capture-speak').addEventListener('click', async () => {
     message('Recording is unavailable in this browser. Type or paste a note instead.');
     return;
   }
+  const captureEpoch = sessionEpoch;
+  const captureWorkspace = workspaceId;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (captureEpoch !== sessionEpoch) { stream.getTracks().forEach((track) => track.stop()); return; }
+    voiceCaptureStream = stream;
     const mimeType = ['audio/webm', 'audio/mp4', 'audio/ogg']
       .find((type) => MediaRecorder.isTypeSupported(type));
     if (!mimeType) { stream.getTracks().forEach((track) => track.stop()); throw new Error('No supported audio format.'); }
@@ -2303,13 +2333,17 @@ $('capture-speak').addEventListener('click', async () => {
       clearTimeout(voiceStopTimer);
       $('capture-speak').textContent = 'Record voice note';
       stream.getTracks().forEach((track) => track.stop());
+      voiceCaptureStream = null;
+      if (captureEpoch !== sessionEpoch || captureWorkspace !== workspaceId) return;
       const audio = new Blob(chunks, { type: mimeType });
       if (audio.size > 2000000) { message('Voice note is over 2 MB. Record a shorter note.'); return; }
       const reader = new FileReader();
       reader.onload = async () => {
         try {
+          if (captureEpoch !== sessionEpoch || captureWorkspace !== workspaceId) return;
           const base64 = String(reader.result).split(',')[1];
-          const result = await api('transcribe_voice', { workspaceId, base64, mimeType });
+          const result = await api('transcribe_voice', { workspaceId: captureWorkspace, base64, mimeType });
+          if (captureEpoch !== sessionEpoch || captureWorkspace !== workspaceId) return;
           $('capture-kind').value = 'voice';
           $('capture-text').value = result.text;
           message('Transcription ready. Review and edit it before saving.');
@@ -2384,10 +2418,10 @@ $('view-saved-debrief').addEventListener('click', (event) => run(event.currentTa
 }));
 $('review-proposals').addEventListener('click', async () => renderLedger(await api('ledger', { workspaceId })));
 
-const savedGuest = sessionStorage.getItem(guestKey);
+const savedGuest = readGuestState(sessionStorage, guestKey);
 if (savedGuest) {
   guest = true;
-  state = JSON.parse(savedGuest);
+  state = savedGuest;
   identity();
   restoreGuestDrafts();
   if (restoreCachedInterview()) { /* Keep the session in its current room after refresh. */ }
@@ -2564,6 +2598,9 @@ $('prep-export').addEventListener('click', async (event) => run(event.currentTar
 $('capture-file').addEventListener('change', async (event) => {
   const file = event.currentTarget.files?.[0];
   if (!file) return;
+  const fileEpoch = sessionEpoch;
+  const fileWorkspace = workspaceId;
+  const currentFileContext = () => fileEpoch === sessionEpoch && fileWorkspace === workspaceId;
   try {
     if (file.type.startsWith('audio/')) {
       if (file.size > 2000000) { message('That recording is over 2 MB. Upload its transcript instead, or record a short voice note.'); return; }
@@ -2574,15 +2611,19 @@ $('capture-file').addEventListener('change', async (event) => {
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      const result = await api('transcribe_voice', { workspaceId, base64, mimeType: file.type });
+      if (!currentFileContext()) return;
+      const result = await api('transcribe_voice', { workspaceId: fileWorkspace, base64, mimeType: file.type });
+      if (!currentFileContext()) return;
       $('capture-kind').value = 'voice';
       $('capture-text').value = result.text;
     } else if (/\.(txt|vtt|srt)$/i.test(file.name)) {
       const text = (await file.text()).replace(/^\d+\s*$|^[\d:.,]+\s*-->.*$/gm, '').replace(/^WEBVTT.*$/m, '').replace(/\n{3,}/g, '\n\n').trim();
+      if (!currentFileContext()) return;
       $('capture-kind').value = 'transcript';
       $('capture-text').value = text.slice(0, 12000);
     } else {
       const parsed = await extractDocument(file);
+      if (!currentFileContext()) return;
       $('capture-kind').value = 'transcript';
       $('capture-text').value = String(parsed.text ?? '').slice(0, 12000);
     }

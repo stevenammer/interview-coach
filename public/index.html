@@ -49,7 +49,7 @@
         <div class="career-intro">
           <p class="eyebrow">Interview Coach · Open source</p>
           <h1>Practice the interview<br>with your real stories.</h1>
-          <p class="career-lead">Paste your résumé and a job posting. Confirm which facts are true. Then practice with a mock interviewer and read a debrief that only uses what you confirmed.</p>
+          <p class="career-lead">Paste your résumé and a job posting. Confirm which facts are true. Then practice with a mock interviewer and read a debrief that checks your answers against those facts.</p>
           <div class="actions"><button id="try-sample" type="button">See a real practice workspace</button></div>
           <p class="small">Steven Ammer, practicing in public for a sales training role at his employer. Public information and his own words only. No account needed.</p>
         </div>
@@ -58,7 +58,7 @@
           <dl><div><dt>Facts</dt><dd>Each fact shows the line it came from. You confirm it first.</dd></div><div><dt>Practice</dt><dd>Type or talk through a mock interview.</dd></div><div><dt>Debrief</dt><dd>Feedback on that run, then practice cards for the details.</dd></div></dl>
         </aside>
       </div>
-      <section class="career-section career-product" aria-labelledby="career-product-title"><p class="eyebrow">Use Interview Coach for your own search</p><h2 id="career-product-title">Your stories belong here.</h2><p>Bring your résumé and a job posting. Check the facts, practice your answers, review the debrief, and drill the details. An account saves your progress between visits.</p><div class="actions"><button id="try-guest" type="button" class="secondary">Start with my own résumé</button><button id="show-auth" type="button" class="secondary">Sign in or sign up</button></div><p class="small">Guest work stays in this browser tab. End session clears it. The sample workspace is fictional and doesn't touch any account.</p><p id="guest-voice-limits" class="small" hidden></p>
+      <section class="career-section career-product" aria-labelledby="career-product-title"><p class="eyebrow">Use Interview Coach for your own search</p><h2 id="career-product-title">Your stories belong here.</h2><p>Bring your résumé and a job posting. Check the facts, practice your answers, review the debrief, and drill the details. An account saves your progress between visits.</p><div class="actions"><button id="try-guest" type="button" class="secondary">Start with my own résumé</button><button id="show-auth" type="button" class="secondary">Sign in or sign up</button></div><p class="small">Guest work stays in this browser tab. End session clears it. The sample uses Steven's approved public summary and doesn't touch any account.</p><p id="guest-voice-limits" class="small" hidden></p>
         <a class="career-link" href="#/start">See how the coaching loop works</a>
       </section>
     </section>
@@ -98,7 +98,7 @@
       <h1>Which job are you going for?</h1>
       <button id="open-workspaces" type="button" class="secondary">My saved jobs</button>
       <p>Paste your résumé and the job posting. We'll pull out your strengths, match them to what they're asking for, and show you where each one came from.</p>
-      <p class="meta">A rough résumé is fine. You can paste text or upload a file. After you tap the button, wait about 20 to 30 seconds and keep this tab open. You'll check everything before it's used, so nothing here is final.</p>
+      <p class="meta">A rough résumé is fine. You can paste text or upload a file. AI steps send the text needed for that step to the site's AI provider. After you tap the button, wait about 20 to 30 seconds and keep this tab open. You'll check everything before it's used, so nothing here is final.</p>
       <form id="paste-form">
         <label for="job-label">Give this job a name (required)</label><input id="job-label" name="jobLabel" maxlength="120" required placeholder="Operations Manager at Harbor Fitness">
         <label for="resume">Your résumé</label><p class="meta">For your first job, paste or upload your résumé here. For another saved job, you can leave this blank to reuse it.</p><textarea id="resume" name="resume" rows="10" maxlength="12000"></textarea>
@@ -350,7 +350,8 @@
       <div id="transcript" aria-live="polite"></div>
       <div id="between-answer-coaching" aria-live="polite"></div>
       <div id="voice-transcript-tools" hidden><p>If the transcript got your words wrong, fix them here first. We'll ask you to confirm anything new.</p>
-        <label for="voice-correction">Correct selected answer</label><select id="voice-turn-select"></select>
+        <label for="voice-turn-select">Choose an answer</label><select id="voice-turn-select"></select>
+        <label for="voice-correction">Correct selected answer</label>
         <textarea id="voice-correction" rows="5" maxlength="4000"></textarea>
         <button id="save-voice-correction" type="button">Save correction</button>
         <button id="voice-debrief" type="button" class="secondary">Open debrief</button></div>
@@ -416,7 +417,7 @@
       <dt>It's taking a long time.</dt><dd>The AI step can take up to 30 seconds. Keep the tab open. If it stops, tap Try again or refresh. Your work is saved.</dd>
       <dt>I got an error.</dt><dd>Wait a minute and try again. If it keeps happening, take a screenshot and send it to whoever runs this site.</dd>
       <dt>The microphone won't work.</dt><dd>Your browser asks for permission the first time. Tap Allow. If you said no, tap the lock icon by the address bar and allow the microphone. Typing your answers works too.</dd>
-      <dt>Who can see my stuff?</dt><dd>Only you. Guest work stays in this browser tab and clears when you tap End session. Signed-in work is saved to your account. You can delete your account any time.</dd>
+      <dt>Who can see my stuff?</dt><dd>Guest work is kept in this browser tab and clears when you tap End session. Signed-in work is saved to your account, and the site operator can read its database. AI steps send the text or files needed for that step to the configured AI provider. Voice calls also go to Retell. You can delete your account any time.</dd>
       <dt>Why does it keep asking me to confirm things?</dt><dd>You check the details pulled from your sources before they're used. If a fact is wrong, fix it. If it's right, confirm it.</dd>
       <dt>What if my sources disagree?</dt><dd>My Facts shows possible conflicts with both source quotes. You can also select two details to flag a conflict. Fix a detail, set it aside, or explain when each applies and resolve the review. Unresolved pairs stay out of new practice and writing evidence. Your original sources and review history stay available.</dd>
       <dt>I forgot my password.</dt><dd>There's no reset email yet. Ask whoever runs this site to reset it for you.</dd>

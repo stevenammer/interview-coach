@@ -61,7 +61,7 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const session = await issueSession(repo, user, false);
 const cookie = session.cookie.split(';')[0].split('=');
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
 const context = await browser.newContext({ viewport: { width: 390, height: 950 } });
 await context.addCookies([{ name: cookie[0], value: cookie.slice(1).join('='), url: base }]);
 const page = await context.newPage();

@@ -1,4 +1,5 @@
 // Live check of slice 4-7 features on real Gemini/Vertex with a fictional candidate. Not part of npm test.
+if (process.env.ALLOW_LIVE_MODEL_CALLS !== '1') throw new Error('Live provider calls require ALLOW_LIVE_MODEL_CALLS=1. Use npm test for offline checks.');
 import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { pgliteSql } from '../../src/db.js';

@@ -71,7 +71,7 @@ const model = { async generate(task, prompt, schema) {
 } };
 
 const handler = createHandler({ repo, model, plainModel, plainCache: null,
-  env: { ABUSE_HMAC_KEY: 'long-test-only-random-abuse-hmac-key', RETELL_API_KEY: 'unused', RETELL_GUEST_AGENT_ID: 'unused' } });
+  env: { ABUSE_HMAC_KEY: 'long-test-only-random-abuse-hmac-key', RETELL_API_KEY: 'unused', RETELL_GUEST_AGENT_ID: 'unused', RETELL_WEBHOOK_KEY: 'offline-test-webhook-key' } });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer(async (req, res) => {
   try {
@@ -93,7 +93,7 @@ const server = http.createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } }); // phone
 const page = await context.newPage();
 let voiceStartRequests = 0;
@@ -192,18 +192,19 @@ try {
   await page.waitForTimeout(50);
   assert.equal(await page.evaluate(() => window.__micCalls), 0, 'cancel happens before microphone access');
   assert.equal(voiceStartRequests, 0, 'cancel happens before a paid call request');
-  await page.evaluate(() => { document.querySelector('#start-voice').hidden = true; });
+  await page.evaluate(() => { window.confirm = () => true; });
   ok('voice: cancel confirmation starts neither microphone nor paid call');
   // Voice setting: default OFF, persisted, and no voice call is ever started here.
   const voiceBox = page.locator('#plain-voice');
   assert.equal(await voiceBox.isVisible(), true);
   assert.equal(await voiceBox.isChecked(), false);
   await voiceBox.check();
-  assert.equal(await page.evaluate(() => localStorage.getItem('interview-coach-plain-voice')), 'on');
+  assert.equal(await page.evaluate(() => localStorage.getItem('interview-coach-plain-english')), 'on');
   await page.reload();
   await page.waitForSelector('#landing:not([hidden]), #practice:not([hidden]), #ledger:not([hidden]), #workspaces:not([hidden])');
-  assert.equal(await page.evaluate(() => localStorage.getItem('interview-coach-plain-voice')), 'on');
-  await page.evaluate(() => localStorage.setItem('interview-coach-plain-voice', 'off'));
+  assert.equal(await page.evaluate(() => localStorage.getItem('interview-coach-plain-english')), 'on');
+  await flip();
+  assert.equal(await toggle.getAttribute('aria-checked'), 'false');
   ok('practice screen: Plain English interviewer setting defaults OFF and persists');
 
   // Back into the guest session (the saved guest state survives a reload).
