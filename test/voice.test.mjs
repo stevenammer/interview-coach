@@ -111,7 +111,7 @@ test('default per-user budget permits one full voice reservation for each of two
   } finally { await db.close(); }
 });
 
-test('voice create timeout releases minutes and spend, and sends only bounded confirmed facts', async () => {
+test('voice create timeout retains caps, blocks a retry, and sends only bounded confirmed facts', async () => {
   const { db, repo, a, workspace, model } = await setup();
   try {
     const source = await repo.addSource(a.id, 'resume', 'Facts', 'x'.repeat(200));
@@ -123,8 +123,15 @@ test('voice create timeout releases minutes and spend, and sends only bounded co
     await assert.rejects(startVoice({ repo, model, env: tightEnv, fetchImpl: async () => {
       throw new TypeError('network down');
     } }, a.id, 'Alex', input(workspace)), /network down/);
+    await assert.rejects(startVoice({ repo, model, env: tightEnv, fetchImpl: async () => {
+      assert.fail('an uncertain call must keep the minute cap reserved');
+    } }, a.id, 'Alex', input(workspace)), /voice minutes are used/);
+    const held = await repo.sql("SELECT state,estimated_micros FROM spend_reservations WHERE bucket='voice'");
+    assert.equal(held.length, 1);
+    assert.equal(held[0].state, 'reserved');
+    assert.equal(Number(held[0].estimated_micros), 6_000_000);
     let variables;
-    await startVoice({ repo, model, env: tightEnv, fetchImpl: async (_url, options) => {
+    await startVoice({ repo, model, env: { ...env, DAILY_USD_CAP: '60' }, fetchImpl: async (_url, options) => {
       variables = JSON.parse(options.body).retell_llm_dynamic_variables;
       return Response.json({ call_id: 'call-after-timeout', access_token: 'token', transport: 'gateway', ice_servers: [] });
     } }, a.id, 'Alex', input(workspace));
@@ -201,5 +208,24 @@ test('ended-first transcript, cross-owner correction denial, and edited transcri
     assert.match(edits[0].corrected_text, /shift plan/);
     assert.ok((await repo.facts(a.id, workspace.id)).filter((fact) => fact.domain === 'candidate')
       .every((fact) => fact.review_state === 'pending'));
+  } finally { await db.close(); }
+});
+
+
+test('voice create releases definitive rejection but retains ambiguous server failure', async () => {
+  const { db, repo, a, workspace, model } = await setup();
+  try {
+    const tightEnv = { ...env, VOICE_DAILY_MINUTES_LIMIT: '30' };
+    await assert.rejects(startVoice({ repo, model, env: tightEnv,
+      fetchImpl: async () => new Response('rejected', { status: 400 }) }, a.id, 'Alex', input(workspace)), /Could not start/);
+    let held = await repo.sql("SELECT state,actual_micros FROM spend_reservations WHERE bucket='voice'");
+    assert.equal(held[0].state, 'settled');
+    assert.equal(Number(held[0].actual_micros), 0);
+    await assert.rejects(startVoice({ repo, model, env: tightEnv,
+      fetchImpl: async () => new Response('unknown outcome', { status: 503 }) }, a.id, 'Alex', input(workspace)), /Could not start/);
+    await assert.rejects(startVoice({ repo, model, env: tightEnv,
+      fetchImpl: async () => assert.fail('must not dispatch past held minutes') }, a.id, 'Alex', input(workspace)), /voice minutes are used/);
+    held = await repo.sql("SELECT state FROM spend_reservations WHERE bucket='voice'");
+    assert.deepEqual(held.map(row => row.state).sort(), ['reserved', 'settled']);
   } finally { await db.close(); }
 });

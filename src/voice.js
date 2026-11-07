@@ -74,6 +74,8 @@ export async function startVoice({ repo, model, env, fetchImpl = fetch, plainMod
     if (input.plainEnglish === true) {
       variables = await applyPlainInterviewer(variables, started.interview.plan_json, plainModel);
     }
+    // Once dispatched, a network failure or 5xx cannot prove that no call was created.
+    providerMayHaveCreated = true;
     const response = await fetchImpl('https://api.retellai.com/v3/create-web-call', {
       method: 'POST', headers: { authorization: `Bearer ${env.RETELL_API_KEY}`,
         'content-type': 'application/json' },
@@ -81,14 +83,16 @@ export async function startVoice({ repo, model, env, fetchImpl = fetch, plainMod
         retell_llm_dynamic_variables: variables, data_storage_setting: 'everything_except_pii',
         data_storage_retention_days: 1,
         agent_override: { agent: { max_call_duration_ms: minutes * 60_000,
-          data_storage_setting: 'everything_except_pii', data_storage_retention_days: 1 } },
+          data_storage_setting: 'everything_except_pii', data_storage_retention_days: 1, opt_in_signed_url: true } },
         metadata: { interview_id: started.interview.id } }),
       signal: AbortSignal.timeout(12000),
     });
     if (!response.ok) {
-      await repo.settle(reservation, 0);
-      await repo.releaseVoiceMinutes(owner, day, minutes);
-      released = true;
+      if (response.status >= 400 && response.status < 500 && response.status !== 408) {
+        await repo.settle(reservation, 0);
+        await repo.releaseVoiceMinutes(owner, day, minutes);
+        released = true;
+      }
       throw new InputError('Could not start the voice call. Use text practice.', 503);
     }
     providerMayHaveCreated = true;
@@ -101,8 +105,8 @@ export async function startVoice({ repo, model, env, fetchImpl = fetch, plainMod
     await repo.markVoiceInterview(owner, started.interview.id);
     return { interviewId: started.interview.id, ...connection, maxMinutes: minutes };
   } catch (error) {
-    // A create timeout or network failure gives no usable call credentials. Release our local
-    // cap so one uncertain Retell request cannot block the rest of today's practice.
+    // Only pre-dispatch failures can be safely refunded here. Unknown provider outcomes
+    // retain the spend/minute hold until reconciled, so retries cannot bypass the caps.
     if (!released && !providerMayHaveCreated) {
       if (reservation) await repo.settle(reservation, 0);
       await repo.releaseVoiceMinutes(owner, day, minutes);
@@ -130,7 +134,7 @@ export function normalizeRetellTurns(data) {
       text: item.content.trim().slice(0, 4000) }));
   if (typeof data.transcript !== 'string') return [];
   return data.transcript.split(/\r?\n/).map((line) => line.match(/^(Agent|User):\s*(.+)$/i))
-    .filter(Boolean).map((match) => ({ speaker: match[1].toLowerCase() === 'agent' ? 'interviewer' : 'candidate',
+    .filter(Boolean).slice(0, 200).map((match) => ({ speaker: match[1].toLowerCase() === 'agent' ? 'interviewer' : 'candidate',
       text: match[2].trim().slice(0, 4000) }));
 }
 
@@ -138,6 +142,7 @@ export async function acceptVoiceWebhook({ repo, raw, signature, key, now = Date
   if (!verifyRetellSignature(raw, signature, key, now)) return { status: 401, result: 'invalid_signature' };
   let event;
   try { event = JSON.parse(raw); } catch { return { status: 400, result: 'invalid_json' }; }
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return { status: 400, result: 'invalid_event' };
   if (!['call_ended', 'call_analyzed'].includes(event.event) || typeof event.call?.call_id !== 'string') {
     return { status: 200, result: 'ignored' };
   }
@@ -233,18 +238,23 @@ export async function startGuestVoice({ repo, env, fetchImpl = fetch, plainModel
     if (input.plainEnglish === true) {
       variables = await applyPlainInterviewer(variables, started.interview.plan_json, plainModel);
     }
+    // Once dispatched, a network failure or 5xx cannot prove that no call was created.
+    providerMayHaveCreated = true;
     const response = await fetchImpl('https://api.retellai.com/v3/create-web-call', {
       method: 'POST', headers: { authorization: `Bearer ${env.RETELL_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify({ agent_id: env.RETELL_GUEST_AGENT_ID, retell_llm_dynamic_variables: variables,
         data_storage_setting: 'everything_except_pii', data_storage_retention_days: 1,
-        agent_override: { agent: { max_call_duration_ms: minutes * 60_000 } },
+        agent_override: { agent: { max_call_duration_ms: minutes * 60_000,
+          data_storage_setting: 'everything_except_pii', data_storage_retention_days: 1, opt_in_signed_url: true } },
         metadata: { guest: true } }),
       signal: AbortSignal.timeout(12000),
     });
     if (!response.ok) {
-      await repo.settle(reservation, 0);
-      await repo.releaseGuestVoicePool(day, minutes);
-      released = true;
+      if (response.status >= 400 && response.status < 500 && response.status !== 408) {
+        await repo.settle(reservation, 0);
+        await repo.releaseGuestVoicePool(day, minutes);
+        released = true;
+      }
       throw new InputError('Could not start the voice call. Use text practice.', 503);
     }
     providerMayHaveCreated = true;

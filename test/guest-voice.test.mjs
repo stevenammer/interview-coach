@@ -74,6 +74,9 @@ test('guest voice uses the guest agent with a 5-minute cap and returns a debrief
     const create = calls.find((c) => c.url.includes('create-web-call')).body;
     assert.equal(create.agent_id, 'guest-agent');
     assert.equal(create.agent_override.agent.max_call_duration_ms, 5 * 60_000);
+    assert.equal(create.agent_override.agent.data_storage_retention_days, 1);
+    assert.equal(create.agent_override.agent.data_storage_setting, 'everything_except_pii');
+    assert.equal(create.agent_override.agent.opt_in_signed_url, true);
     assert.ok(started.guestToken && started.accessToken);
     assert.equal(started.transport, 'gateway');
     assert.deepEqual(started.iceServers, []);
@@ -154,5 +157,24 @@ test('webhook for a guest call only settles spend, never stores a transcript', a
     assert.equal(result.result, 'guest_settled');
     const everything = JSON.stringify(await repo.sql('SELECT * FROM guest_voice_calls'));
     assert.equal(everything.includes('secret guest words'), false);
+  } finally { await db.close(); }
+});
+
+
+test('uncertain guest create preserves pool and spend; definitive rejection frees the hold', async () => {
+  const { db, repo } = await setup();
+  try {
+    const { guest, workspace } = await guestWithWorkspace();
+    const service = new CoachService(guest, model);
+    const tight = { ...env, GUEST_VOICE_DAILY_MINUTES: '5' };
+    const input = { workspaceId: workspace.id };
+    await assert.rejects(startGuestVoice({ repo, env: tight,
+      fetchImpl: async () => new Response('rejected', { status: 400 }) }, service, 'rejected-browser', input), /Could not start/);
+    await assert.rejects(startGuestVoice({ repo, env: tight,
+      fetchImpl: async () => { throw new TypeError('connection lost after dispatch'); } }, service, 'uncertain-browser', input), /connection lost/);
+    await assert.rejects(startGuestVoice({ repo, env: tight,
+      fetchImpl: async () => assert.fail('must not create another possibly billable call') }, service, 'next-browser', input), /used up for today/);
+    const rows = await repo.sql("SELECT state FROM spend_reservations WHERE bucket='voice'");
+    assert.deepEqual(rows.map(row => row.state).sort(), ['reserved', 'settled']);
   } finally { await db.close(); }
 });

@@ -8,7 +8,19 @@ export function createVoiceBackgroundHandler({ repo, model, key }) {
   return async (request) => {
     if (request.method !== 'POST' || !key) return new Response(null, { status: 403 });
     let data;
-    try { data = await request.json(); } catch { return new Response(null, { status: 400 }); }
+    try {
+      const chunks = []; let length = 0;
+      const reader = request.body?.getReader();
+      if (reader) for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        length += value.byteLength;
+        if (length > 1024) { await reader.cancel(); return new Response(null, { status: 413 }); }
+        chunks.push(Buffer.from(value));
+      }
+      data = JSON.parse(Buffer.concat(chunks, length).toString('utf8'));
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return new Response(null, { status: 400 });
+    } catch { return new Response(null, { status: 400 }); }
     if (typeof data.jobId !== 'string' || !/^[0-9a-f-]{36}$/i.test(data.jobId) ||
       typeof data.proof !== 'string' || !/^[0-9a-f]{64}$/i.test(data.proof)) {
       return new Response(null, { status: 403 });

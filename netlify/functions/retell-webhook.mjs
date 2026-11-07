@@ -7,8 +7,23 @@ export function createWebhookHandler({ repo, env = process.env, enqueue = null, 
   return async (request) => {
     if (request.method !== 'POST') return new Response(null, { status: 405 });
     if (!env.RETELL_WEBHOOK_KEY) return new Response(null, { status: 503 });
-    const raw = await request.text();
-    if (raw.length > 150000) return new Response(null, { status: 413 });
+    // Bound unauthenticated input while reading, before allocating an unbounded string.
+    const reader = request.body?.getReader();
+    const chunks = [];
+    let length = 0;
+    try {
+      if (reader) for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        length += value.byteLength;
+        if (length > 150000) {
+          await reader.cancel();
+          return new Response(null, { status: 413 });
+        }
+        chunks.push(Buffer.from(value));
+      }
+    } catch { return new Response(null, { status: 400 }); }
+    const raw = Buffer.concat(chunks, length).toString('utf8');
     const accepted = await acceptVoiceWebhook({ repo, raw,
       signature: request.headers.get('x-retell-signature'), key: env.RETELL_WEBHOOK_KEY, now: now() });
     if (accepted.jobId && enqueue) await enqueue(accepted.jobId, request.url);
