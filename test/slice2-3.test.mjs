@@ -103,6 +103,8 @@ test('background jobs, mapped workspaces, personas, ID-only rewrite, and account
       assert.equal((await repo.job(owner, mapJob.id)).status, 'done');
       const map = await service.requirements(owner, workspaces[index]);
       assert.deepEqual(map.map((entry) => entry.type), ['must', 'preferred', 'responsibility']);
+      assert.deepEqual(map.map((entry) => entry.start_offset), [...map.map((entry) => entry.start_offset)].sort((a,b) => a-b),
+        'requirements retain source order when transactional inserts share a timestamp');
       assert.deepEqual(map.map((entry) => entry.category), ['direct', 'adjacent', 'none']);
       assert.equal(item.jd.slice(map[0].start_offset, map[0].end_offset), map[0].text);
       assert.equal(map[2].fact_ids.length, 0);

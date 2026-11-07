@@ -536,7 +536,7 @@ export class Repository {
       JOIN source_spans s ON s.user_id=r.user_id AND s.id=r.span_id
       LEFT JOIN requirement_match_facts mf ON mf.user_id=m.user_id AND mf.match_id=m.id
       WHERE r.user_id=$1 AND r.workspace_id=$2
-      GROUP BY r.id,m.id,s.id ORDER BY r.created_at,r.id`, [owner, workspaceId]);
+      GROUP BY r.id,m.id,s.id ORDER BY s.start_offset,s.end_offset,r.created_at,r.id`, [owner, workspaceId]);
   }
 
   async addFact(owner, data) {
