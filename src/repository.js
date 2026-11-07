@@ -191,14 +191,10 @@ export class Repository {
   }
 
   async coachNotes(owner, workspaceId = null) {
-    try {
-      return await this.sql(`SELECT * FROM coach_notes WHERE user_id=$1 AND
-        ($2::uuid IS NULL OR workspace_id IS NULL OR workspace_id=$2) ORDER BY created_at DESC`, [owner, workspaceId]);
-    } catch (error) {
-      // Keeps rolling migration workers usable while 017 is being applied.
-      if (error.code === '42P01') return [];
-      throw error;
-    }
+    // Optional historical tables must be checked before querying inside a transaction.
+    if (!(await this.sql("SELECT to_regclass('coach_notes') AS name"))[0]?.name) return [];
+    return this.sql(`SELECT * FROM coach_notes WHERE user_id=$1 AND
+      ($2::uuid IS NULL OR workspace_id IS NULL OR workspace_id=$2) ORDER BY created_at DESC`, [owner, workspaceId]);
   }
 
   async addCoachNote(owner, { workspaceId = null, interviewId = null, text }) {
@@ -321,12 +317,10 @@ export class Repository {
     await this.sql(`UPDATE model_jobs SET status='failed',error_code='timed_out',finished_at=$2
       WHERE user_id=$1 AND status='running'
       AND started_at < $2::timestamptz - interval '10 minutes'`, [owner, now]);
-    try {
+    if ((await this.sql("SELECT to_regclass('prep_pack_sections') AS name"))[0]?.name) {
       await this.sql(`UPDATE prep_pack_sections s SET status='failed',error_code='timed_out',updated_at=$2
         FROM model_jobs j WHERE s.user_id=$1 AND j.user_id=$1 AND s.job_id=j.id
         AND j.status='failed' AND j.error_code='timed_out' AND s.status='running'`, [owner, now]);
-    } catch (error) {
-      if (error.code !== '42P01') throw error;
     }
   }
 
