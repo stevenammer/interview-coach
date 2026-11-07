@@ -1,0 +1,35 @@
+{
+  "name": "interview-coach",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "dev:env": "node --env-file=.env scripts/dev-server.mjs",
+    "test": "node --test --test-concurrency=2",
+    "build:documents": "esbuild public/document-export.js --bundle --minify --format=esm --outfile=public/vendor/document-export.bundle.js",
+    "build:imports": "esbuild public/file-import.js --bundle --minify --format=esm --external:/vendor/* --outfile=public/vendor/file-import.bundle.js"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.7.13",
+    "@netlify/database": "^2.0.1",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "docx": "^9.9.0",
+    "mammoth": "^1.13.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.5.207"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@xmldom/xmldom": "^0.8.15",
+    "esbuild": "^0.28.2",
+    "fflate": "^0.8.3",
+    "jszip": "^3.10.2",
+    "retell-client-js-sdk": "3.0.2"
+  },
+  "description": "Open-source interview practice that only uses facts you confirm.",
+  "license": "MIT",
+  "author": "Steven Ammer"
+}

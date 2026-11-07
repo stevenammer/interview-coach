@@ -1,0 +1,12 @@
+node_modules/
+.netlify/
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.sqlite
+*.log
+.DS_Store
+# Local Retell agent state written by scripts/retell/create-agent.mjs
+scripts/retell/agent.json

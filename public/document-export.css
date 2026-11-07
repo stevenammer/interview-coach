@@ -1,0 +1,46 @@
+@font-face { font-family: "Noto Sans"; src: url("/vendor/NotoSans-Regular.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: "Noto Sans"; src: url("/vendor/NotoSans-Bold.ttf") format("truetype"); font-style: normal; font-weight: 700; font-display: swap; }
+@font-face { font-family: "Noto Serif"; src: url("/vendor/NotoSerif-Regular.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: "Noto Serif"; src: url("/vendor/NotoSerif-Bold.ttf") format("truetype"); font-style: normal; font-weight: 700; font-display: swap; }
+@font-face { font-family: "Noto Sans Mono"; src: url("/vendor/NotoSansMono-Regular.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: "Noto Sans Mono"; src: url("/vendor/NotoSansMono-Bold.ttf") format("truetype"); font-style: normal; font-weight: 700; font-display: swap; }
+.writer-review { margin-block: 1.5rem; }
+.writer-review:empty { display: none; }
+.writer-review .note { padding: .8rem 1rem; border-left: 4px solid #805b16; background: #fff7df; color: #49380f; border-radius: .45rem; }
+.writer-review .doc-section { margin-block: 1.25rem; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--canvas); }
+.writer-review .doc-section h2 { margin: 0 0 .5rem; font-size: 1.2rem; }
+.writer-review .doc-line { padding-block: .25rem; }
+.writer-review .doc-line.flagged { border-left: 3px solid #805b16; padding-left: .8rem; }
+.writer-review .doc-line p { margin-block: .25rem; }
+.writer-review ul { margin-block: .35rem .75rem; }
+#writer-editor { margin-top: 1.5rem; }
+.writer-edit-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.writer-edit-controls, .writer-preview-rail { min-width: 0; }
+.writer-choice-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+.writer-choice-row label { margin-top: 0; }
+#writer-text { min-height: 24rem; resize: vertical; font-family: ui-monospace, "Noto Sans Mono", monospace; line-height: 1.5; white-space: pre-wrap; }
+.writer-save-state { min-height: 1.5em; margin-block: .4rem; color: var(--muted); font-size: .85rem; }
+.writer-preview-rail h2 { margin: 0 0 .75rem; font-size: 1.15rem; }
+.writer-paper { --writer-accent: #116466; min-height: 22rem; padding: clamp(1rem, 3vw, 2rem); overflow-wrap: anywhere; background: #fff; color: #242b2e; border: 1px solid #d9dedc; box-shadow: 0 8px 25px rgb(25 36 34 / 10%); }
+.writer-paper[data-color="navy"] { --writer-accent: #24466a; }
+.writer-paper[data-color="plum"] { --writer-accent: #66547f; }
+.writer-paper[data-color="slate"] { --writer-accent: #46545c; }
+.writer-paper[data-font="Noto Serif"] pre { font-family: "Noto Serif", Georgia, serif; }
+.writer-paper[data-font="Noto Sans Mono"] pre { font-family: "Noto Sans Mono", ui-monospace, monospace; }
+.writer-paper pre { margin: 0; color: inherit; font: 10pt/1.45 "Noto Sans", Arial, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+.writer-export-actions { margin-top: 1.25rem; }
+.writer-review + #writer-editor { margin-top: 2rem; }
+@media (min-width: 640px) {
+  .writer-choice-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 900px) {
+  .writer-edit-layout { grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 1.5rem; }
+  .writer-preview-rail { position: sticky; top: 1rem; }
+}
+@media (max-width: 420px) {
+  .writer-export-actions > button { flex: 1 1 100%; }
+  .writer-paper { min-height: 18rem; }
+}
+@media print {
+  #writer-editor, .writer-review, #writer-back, #write-resume, #write-cover, .writer-export-actions { display: none !important; }
+}

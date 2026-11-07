@@ -1,0 +1,87 @@
+{
+  "version": "2026-11-07",
+  "name": "Steven Ammer",
+  "sourceTitle": "Steven Ammer's practice summary (public information and his own words)",
+  "sourceNote": "This is Steven Ammer's real practice workspace for a role he is going after at his current employer, Travel + Leisure Co. It is built only from public information and his own words. No employer materials are used. Anything marked [add a real example] is still missing on purpose.",
+  "defaultRole": {
+    "id": "sales-training-academy-team-lead",
+    "company": "Travel + Leisure Co.",
+    "role": "Sales Training Academy team lead",
+    "url": ""
+  },
+  "facts": [
+    {
+      "key": "sales_background",
+      "group": "Sales background",
+      "text": "I've spent 15 years in consumer phone sales as an agent, supervisor, and trainer."
+    },
+    {
+      "key": "current_work",
+      "group": "Sales background",
+      "text": "Today I sell vacation packages by phone."
+    },
+    {
+      "key": "floor_supervision",
+      "group": "Supervision",
+      "text": "At a previous timeshare employer I supervised about 40 agents and 2 assistant supervisors on the late-shift inbound floor. My titles were supervisor titles, not manager."
+    },
+    {
+      "key": "tenure_honesty",
+      "group": "Supervision",
+      "text": "That tenure mixed sales, floor supervision and training roles. It wasn't continuous management or training tenure."
+    },
+    {
+      "key": "training_library",
+      "group": "Training and coaching",
+      "text": "I wrote original training resources, including an Assistant Supervisor Handbook that other supervisors adopted."
+    },
+    {
+      "key": "curriculum_creation",
+      "group": "Training and coaching",
+      "text": "I designed and taught a five-day Week 4 curriculum with workbooks, pretests, coached calls, live practice and assessments. Five deals was the graduation requirement. I'm not claiming a measured pass rate."
+    },
+    {
+      "key": "curriculum_handoff",
+      "group": "Training and coaching",
+      "text": "I taught and refined the Week 4 program, then handed the same materials and process to a separate night-shift trainer who used them. That's my firsthand account of the delivery and handoff."
+    },
+    {
+      "key": "education",
+      "group": "Education",
+      "text": "I have an Associate of Arts degree."
+    }
+  ],
+  "draftAnswersTitle": "Draft answers, still practicing",
+  "draftAnswers": [
+    {
+      "question": "How do you teach a skill?",
+      "answer": "Draft, still practicing. I start with what a new agent has to be able to do on a call. Then I teach it in small pieces, show it, and have them practice it live before it counts. When I built a five-day Week 4 curriculum, it had workbooks, pretests, coached calls, live practice and assessments, so people did the thing instead of only hearing about it. I taught it and refined it as I went. [add a real example of a skill I taught and what changed]"
+    },
+    {
+      "question": "How do you give hard feedback?",
+      "answer": "Draft, still practicing. I keep it about the call, not the person. I say what I heard, what I'd want instead, and one thing to try on the next call. I say it privately and soon, not weeks later. [add a real example of hard feedback I gave and how it went]"
+    },
+    {
+      "question": "What do you do with a trainee who isn't improving?",
+      "answer": "Draft, still practicing. First I figure out what's stuck: not knowing what to do, not being able to do it yet, or not trusting themselves on a live call. Each one needs a different fix. Then I set a smaller target, add more live practice, and pick a date to look again. If it still isn't moving, I'm honest with them and with whoever owns that decision. [add a real example of a trainee who wasn't improving]"
+    },
+    {
+      "question": "How do you use call reviews?",
+      "answer": "Draft, still practicing. I review a call with the agent, not about them. I let them pick a moment first, then I share one I noticed, and we agree on one thing to change. Coached calls were part of my Week 4 curriculum, and I coached calls as a floor supervisor. [add a real example of a call review that changed something]"
+    },
+    {
+      "question": "What does good coaching look like?",
+      "answer": "Draft, still practicing. It's specific, it happens soon after the call, and it's about one thing at a time. The agent leaves knowing exactly what to try next. I've spent 15 years in consumer phone sales as an agent, supervisor, and trainer, so I've seen it from every seat. [add a real example of coaching I'm proud of]"
+    },
+    {
+      "question": "How do you measure whether training worked?",
+      "answer": "Draft, still practicing. I like the four levels from Kirkpatrick: did people find it useful, did they learn it, are they using it on real calls, and did results move. I'll be straight about my own history. Five deals was the graduation requirement in my Week 4 program, and I don't have a measured training outcome to claim. Next time I'd pick the measure before the first class starts. [add what I'd track in this role]"
+    }
+  ],
+  "feedbackExample": {
+    "title": "Coach feedback (blank until I run a practice interview)",
+    "strengths": "[not scored yet]",
+    "gaps": "[not scored yet]",
+    "nextRep": "[not scored yet]"
+  }
+}

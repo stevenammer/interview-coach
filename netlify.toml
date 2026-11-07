@@ -1,0 +1,18 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api"
+  to = "/.netlify/functions/api"
+  status = 200
+
+# Report-only until the vendored Retell bundle has been watched in production with a real voice call.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "microphone=(self), camera=(), geolocation=()"
+    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; media-src 'self' blob: https:; connect-src 'self' https://api.retellai.com https://*.retellai.com wss://*.retellai.com https://*.livekit.cloud wss://*.livekit.cloud; img-src 'self' https: data:; font-src 'self' https: data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"

@@ -1,0 +1,2 @@
+ALTER TABLE debriefs ADD COLUMN input_hash TEXT;
+ALTER TABLE debriefs ADD COLUMN fact_gate_unavailable BOOLEAN NOT NULL DEFAULT FALSE;

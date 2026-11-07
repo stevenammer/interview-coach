@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interview Coach</title>
+  <meta name="description" content="Open-source interview practice grounded in the facts you confirm.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/document-export.css">
+  <script type="module" src="/app.js"></script>
+  <script defer src="/vendor/mammoth.min.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="app-layout">
+  <nav id="app-rail" aria-label="Interview Coach sections" aria-hidden="false">
+    <div class="rail-brand"><span class="brand-mark" aria-hidden="true">ic</span><span><strong>Interview Coach</strong><small>Practice with your real stories.</small></span></div>
+    <div class="rail-group" aria-labelledby="rail-start"><p id="rail-start">Start</p>
+      <a href="#/start" data-route="start"><span>How to use this</span><small>Six steps from résumé to ready.</small></a>
+      <a href="#/story" data-route="landing"><span>Welcome</span><small>What this is and a sample to try.</small></a>
+    </div>
+    <div class="rail-group" aria-labelledby="rail-prepare"><p id="rail-prepare">Prepare</p>
+      <a href="#/jobs" data-route="workspaces" data-private-route><span>My jobs</span><small>Track and compare every job.</small></a>
+      <a href="#/facts" data-route="ledger" data-private-route><span>My facts</span><small>Confirm what’s true before it’s used.</small></a>
+      <a href="#/prep" data-route="prep-pack" data-private-route><span>Prep Pack</span><small>A one-page plan for the room.</small></a>
+      <a href="#/writing" data-route="writer" data-private-route><span>Résumé and cover letter</span><small>Drafts from facts you confirmed.</small></a>
+    </div>
+    <div class="rail-group" aria-labelledby="rail-practice"><p id="rail-practice">Practice</p>
+      <a href="#/practice" data-route="practice" data-private-route><span>Mock interview</span><small>Type or talk, then get a debrief.</small></a>
+      <a href="#/immerser" data-route="immerser" data-private-route><span>Step into the job</span><small>Try a simulated week in the role.</small></a>
+      <a href="#/review" data-route="real-capture" data-private-route><span>Review a real interview</span><small>Add notes after the real thing.</small></a>
+      <a href="#/drills" data-route="drills" data-private-route><span>Practice cards</span><small>Recall the details you confirmed.</small></a>
+    </div>
+  </nav>
+  <div class="app-content">
+  <header class="site-header">
+    <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">ic</span>Interview Coach</a>
+    <nav aria-label="Session"><button id="rail-toggle" type="button" class="secondary" aria-expanded="false" aria-controls="app-rail">Menu</button><button id="header-home" type="button" class="secondary">Welcome</button><button id="header-auth" type="button" class="secondary">Sign in / Sign up</button> <button id="theme-toggle" class="secondary" aria-label="Switch color theme" hidden>Theme: auto</button> <button id="plain-toggle" type="button" class="secondary plain-switch" role="switch" aria-checked="false" title="Show every coach and interviewer message in everyday words. Your own answers never change.">Plain English: Off</button> <span id="identity"></span> <button id="end-session" hidden>End session</button> <button id="delete-account" class="secondary" hidden>Delete account</button></nav>
+  </header>
+  <main id="main">
+    <div id="progress-note" role="status" hidden></div>
+    <p id="message" role="alert" tabindex="-1" hidden></p>
+    <button id="retry-pending-job" class="secondary" hidden>Try again (AI step stalled)</button>
+
+    <section id="landing" class="panel public-career">
+      <div class="career-hero">
+        <div class="career-intro">
+          <p class="eyebrow">Interview Coach · Open source</p>
+          <h1>Practice the interview<br>with your real stories.</h1>
+          <p class="career-lead">Paste your résumé and a job posting. Confirm which facts are true. Then practice with a mock interviewer and read a debrief that only uses what you confirmed.</p>
+          <div class="actions"><button id="try-sample" type="button">See a real practice workspace</button></div>
+          <p class="small">Steven Ammer, practicing in public for a sales training role at his employer. Public information and his own words only. No account needed.</p>
+        </div>
+        <aside class="career-at-a-glance" aria-label="What it does">
+          <p class="eyebrow">How it works</p>
+          <dl><div><dt>Facts</dt><dd>Each fact shows the line it came from. You confirm it first.</dd></div><div><dt>Practice</dt><dd>Type or talk through a mock interview.</dd></div><div><dt>Debrief</dt><dd>Feedback on that run, then practice cards for the details.</dd></div></dl>
+        </aside>
+      </div>
+      <section class="career-section career-product" aria-labelledby="career-product-title"><p class="eyebrow">Use Interview Coach for your own search</p><h2 id="career-product-title">Your stories belong here.</h2><p>Bring your résumé and a job posting. Check the facts, practice your answers, review the debrief, and drill the details. An account saves your progress between visits.</p><div class="actions"><button id="try-guest" type="button" class="secondary">Start with my own résumé</button><button id="show-auth" type="button" class="secondary">Sign in or sign up</button></div><p class="small">Guest work stays in this browser tab. End session clears it. The sample workspace is fictional and doesn't touch any account.</p><p id="guest-voice-limits" class="small" hidden></p>
+        <a class="career-link" href="#/start">See how the coaching loop works</a>
+      </section>
+    </section>
+
+    <section id="start" class="panel" hidden>
+      <p class="eyebrow">Interview Coach</p>
+      <h1>How to use Interview Coach</h1>
+      <ol class="start-steps">
+        <li><strong>Add a job.</strong> Paste or upload your résumé and the posting. Screenshots work.</li>
+        <li><strong>Confirm your facts.</strong> Each shows the line it came from. Only confirmed facts get used.</li>
+        <li><strong>See how you match.</strong> Your job hub lines up their asks with your experience. No fake scores.</li>
+        <li><strong>Practice the interview.</strong> Recruiter, hiring manager, panel or senior exec. Type it or talk it.</li>
+        <li><strong>Read the debrief, then drill.</strong> Feedback on that run, then practice cards for your details.</li>
+        <li><strong>Walk in ready.</strong> Build a Prep Pack, draft a résumé or cover letter, log the real interview.</li>
+      </ol>
+      <div class="actions"><button id="start-own-resume" type="button">Start with my own résumé</button><button id="start-sample" type="button" class="secondary">See the practice workspace</button><button id="start-auth" type="button" class="secondary">Sign in or sign up</button></div>
+      <section class="start-preview" aria-labelledby="start-preview-heading"><h2 id="start-preview-heading">See the coaching loop</h2><div class="loop-demo" aria-label="Interactive fictional learning loop"><div class="demo-tabs" aria-label="Explore the learning loop"><button data-demo="0" aria-pressed="true">01 · Learn</button><button data-demo="1" aria-pressed="false">02 · Practice</button><button data-demo="2" aria-pressed="false">03 · Debrief</button><button data-demo="3" aria-pressed="false">04 · Drill</button></div><article id="demo-card" class="demo-card" aria-live="polite"></article><p class="loop-caption">Fictional example only. Never added to your career details.</p></div></section>
+    </section>
+
+    <section id="auth" class="panel" hidden>
+      <h1>Your account</h1>
+      <p>An account saves your jobs and facts so you can come back tomorrow. Just want to look around? <a href="#" id="auth-guest-link">Try it as a guest</a>.</p>
+      <form id="auth-form">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required pattern="[A-Za-z][A-Za-z0-9_]{2,29}" aria-describedby="username-hint" title="3 to 30 letters, numbers or underscores. Start with a letter.">
+        <p class="meta" id="username-hint">3 to 30 letters, numbers or underscores, starting with a letter. No spaces. Example: jamie_r</p>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" minlength="12" required aria-describedby="password-hint" title="At least 12 characters.">
+        <p class="meta" id="password-hint">At least 12 characters. A few random words together works well and is easy to remember.</p>
+        <div class="actions"><button type="submit" name="mode" value="login">Sign in</button><button type="submit" name="mode" value="signup" class="secondary">Create account</button></div>
+        <p class="meta"><strong>Been here before?</strong> Tap Sign in. <strong>First time?</strong> Pick a username and password, then tap Create account. There's no password-reset email yet, so if you get locked out, ask whoever runs this site.</p>
+      </form>
+    </section>
+
+    <section id="paste" class="panel" hidden>
+      <p class="eyebrow">01 · Learn · about two minutes</p>
+      <h1>Which job are you going for?</h1>
+      <button id="open-workspaces" type="button" class="secondary">My saved jobs</button>
+      <p>Paste your résumé and the job posting. We'll pull out your strengths, match them to what they're asking for, and show you where each one came from.</p>
+      <p class="meta">A rough résumé is fine. You can paste text or upload a file. After you tap the button, wait about 20 to 30 seconds and keep this tab open. You'll check everything before it's used, so nothing here is final.</p>
+      <form id="paste-form">
+        <label for="job-label">Give this job a name (required)</label><input id="job-label" name="jobLabel" maxlength="120" required placeholder="Operations Manager at Harbor Fitness">
+        <label for="resume">Your résumé</label><p class="meta">For your first job, paste or upload your résumé here. For another saved job, you can leave this blank to reuse it.</p><textarea id="resume" name="resume" rows="10" maxlength="12000"></textarea>
+        <label for="resume-file">Or upload it (PDF, Word, text, RTF, ODT, or screenshots)</label><input id="resume-file" type="file" accept=".pdf,.docx,.txt,.md,.rtf,.odt,.jpg,.jpeg,.png,.webp,.heic,image/*,text/plain,text/markdown,application/rtf,application/vnd.oasis.opendocument.text" multiple>
+        <label for="jd">The job posting</label><textarea id="jd" name="jd" rows="10" maxlength="12000"></textarea>
+        <label for="jd-file">Or upload the posting (PDF, Word, text, RTF, ODT, or screenshots)</label><input id="jd-file" type="file" accept=".pdf,.docx,.txt,.md,.rtf,.odt,.jpg,.jpeg,.png,.webp,.heic,image/*,text/plain,text/markdown,application/rtf,application/vnd.oasis.opendocument.text" multiple><p class="meta">Screenshots work too, as many as you need. We read the text off them into the box above so you can check it.</p>
+        <button type="submit">Find my strengths →</button>
+      </form>
+    </section>
+
+    <section id="ledger" class="panel" hidden>
+      <p class="eyebrow">Step 1 of 4 · Learn</p>
+      <div class="section-heading"><h1>Your confirmed details</h1><p id="bank-summary"></p></div>
+      <p class="meta">These came from what you gave us. Confirm what's right, fix anything that isn't. Only confirmed details get used in your answers.</p>
+      <div class="actions ledger-top">
+        <button id="confirm-all" type="button" hidden>Looks right, confirm all</button>
+        <button id="ledger-practice" type="button" class="secondary">Practice interview →</button>
+        <button id="open-workspaces-ledger" type="button" class="secondary">Back to my job hub</button>
+      </div>
+      <p id="bank-hint">Tap Confirm on anything that's true. Fix anything that's off. Only confirmed details show up in your practice and your résumé.</p>
+      <details>
+        <summary>Add more about yourself</summary>
+        <div class="actions">
+          <button id="open-dig" class="secondary">Tell a story out loud (optional)</button>
+          <button id="open-library" class="secondary">Add another résumé, review, or writing sample</button>
+          <button id="open-real-capture" class="secondary">Add a real interview</button>
+        </div>
+      </details>
+      <div id="fact-list"></div>
+    </section>
+
+    <section id="practice" class="panel" hidden>
+      <p class="eyebrow">Step 2 of 4 · Practice</p>
+      <h1>Practice interview</h1>
+      <p>Pick who's across the table. They'll ask about this job and dig into your real stories.</p>
+      <div class="persona-picker" role="radiogroup" aria-label="Interviewer">
+        <button type="button" class="persona-card" data-persona="recruiter" role="radio" aria-checked="false"><span class="persona-name">Recruiter</span><span class="persona-sub">Friendly first call. Fit, motivation, quick examples.</span></button>
+        <button type="button" class="persona-card" data-persona="hiring_manager" role="radio" aria-checked="true"><span class="persona-name">Hiring manager</span><span class="persona-sub">Your future boss. How you run things, and the numbers.</span></button>
+        <button type="button" class="persona-card" data-persona="panel" role="radio" aria-checked="false"><span class="persona-name">Panel</span><span class="persona-sub">Three people take turns: ops, people, partners.</span></button>
+        <button type="button" class="persona-card" data-persona="senior_exec" role="radio" aria-checked="false"><span class="persona-name">Senior exec</span><span class="persona-sub">Big picture. Short answers, sharp follow-ups.</span></button>
+      </div>
+      <details>
+        <summary>How tough should it be?</summary>
+        <label for="persona">Interviewer</label>
+        <select id="persona">
+          <option value="recruiter">Recruiter</option>
+          <option value="hiring_manager" selected>Hiring manager</option>
+          <option value="panel">Panel</option>
+          <option value="senior_exec">Senior exec</option>
+        </select>
+        <label for="difficulty">How hard they push</label>
+        <select id="difficulty">
+          <option value="1">Easy · they take your answer</option>
+          <option value="2" selected>Normal · "what was your part?"</option>
+          <option value="3">Tough · "how did you measure it?"</option>
+          <option value="4">Hardest · "what went wrong first?"</option>
+        </select>
+        <label for="practice-mode">Feedback</label>
+        <select id="practice-mode">
+          <option value="mock">At the end, like a real interview</option>
+          <option value="coach">After each answer</option>
+        </select>
+      </details>
+      <label id="plain-voice-setting" class="plain-voice-setting" for="plain-voice" hidden><input id="plain-voice" type="checkbox"> <span><strong>Plain English for the voice call</strong><span class="meta">Short, everyday words. One question at a time. No buzzwords, and no rush.</span></span></label>
+      <div class="practice-choices">
+        <button id="start-interview"><strong>Type</strong><span>Answer in writing at your own pace.</span></button>
+        <button id="start-voice" class="secondary" hidden><strong>Talk (voice)</strong><span>Practice out loud in a live paid call.</span></button>
+      </div>
+      <p id="voice-guest-note" class="meta" hidden>Voice calls for guests run up to 5 minutes, twice a day. Your transcript comes back to this browser and we don't save it. Retell, the voice company, keeps a copy for a day.</p>
+      <p id="voice-setup-note" class="meta" hidden>Voice calls run up to 30 minutes.</p>
+      <div class="actions">
+        <button id="view-saved-debrief" class="secondary" hidden>See my last debrief</button>
+        <button id="see-debrief" class="secondary" hidden>Redo my last debrief</button>
+        <button id="practice-back" type="button" class="secondary">Back to my job hub</button>
+      </div>
+    </section>
+
+    <section id="workspaces" class="panel" hidden>
+      <section id="empty-workspace-state" hidden><p>You don't have a job saved yet.</p><button id="empty-workspace-add" type="button">Add a job</button></section>
+      <h1 data-workspace-content>Your job hub</h1>
+      <p data-workspace-content class="eyebrow">Your jobs. Tap one to switch.</p>
+      <p data-workspace-content id="job-hunt-summary" class="meta"></p>
+      <button data-workspace-content id="download-job-hunt" type="button" class="secondary">Download my job hunt</button>
+      <div data-workspace-content id="workspace-list"></div>
+      <details data-workspace-content id="job-hunt-panel" class="workspace-options job-hunt-panel">
+        <summary id="job-hunt-title"><strong>Track this job</strong> <span id="job-hunt-brief" class="meta"></span></summary>
+        <form id="job-hunt-form" class="job-hunt-grid">
+          <label>Status <select id="hunt-status"></select></label>
+          <label>Applied on <input id="hunt-applied-on" type="date"></label>
+          <label>Next step <input id="hunt-next-step" maxlength="300" placeholder="Send a thank-you note"></label>
+          <label>Next-step date <input id="hunt-next-step-on" type="date"></label>
+          <label class="wide">Posting link or source <input id="hunt-posting-link" maxlength="500" placeholder="Where you found it"></label>
+          <label class="wide">Notes <textarea id="hunt-notes" maxlength="2000" rows="3"></textarea></label>
+          <fieldset class="wide job-hunt-when">
+            <legend>Add this change to the history (optional)</legend>
+            <label>It happened on <input id="hunt-happened-on" type="date"></label>
+            <label>Short note <input id="hunt-log-note" maxlength="300" placeholder="Recruiter emailed back"></label>
+          </fieldset>
+          <button type="submit" class="wide">Save</button>
+        </form>
+        <form id="job-hunt-log-form" class="job-hunt-grid job-hunt-log">
+          <h3 class="wide">Add something that happened</h3>
+          <label>What happened <input id="hunt-log-action" maxlength="300" required placeholder="Recruiter called"></label>
+          <label>On <input id="hunt-log-happened-on" type="date"></label>
+          <button type="submit" class="secondary wide">Add to history</button>
+        </form>
+        <h3>History</h3>
+        <div id="job-hunt-history" aria-label="Job hunt history"></div>
+      </details>
+      <ol data-workspace-content class="start-here" aria-label="Learn, Practice, Debrief, Drill">
+        <li><strong>01 · Learn.</strong> Confirm the details from your résumé.</li>
+        <li><strong>02 · Practice.</strong> Answer questions in a mock interview.</li>
+        <li><strong>03 · Debrief.</strong> Finish the mock interview, or add notes after a real one.</li>
+        <li><strong>04 · Drill.</strong> Recall confirmed details with practice cards.</li>
+      </ol>
+      <aside id="public-workspace-note" class="public-workspace-note" hidden><strong>You're looking at Steven Ammer's real practice workspace.</strong><p>It's his work in progress for a Sales Training Academy team lead role at his employer, built from public information and his own words. No employer materials are used, and this project isn't affiliated with or endorsed by any employer. Draft answers are marked, and gaps say [add a real example]. Changes stay in your guest session.</p><button id="public-workspace-back" type="button" class="secondary">back to the welcome page</button></aside>
+      <details data-workspace-content id="proof-shelf" class="proof-shelf" hidden><summary>Your confirmed proof, ready to practice</summary><p class="meta">Start with a detail you can stand behind. Open My Facts for its source and full review.</p><div id="proof-shelf-list"></div><button id="proof-shelf-open" type="button" class="secondary">Open My Facts</button></details>
+      <p data-workspace-content class="hub-intro" id="hub-intro">Pick what you want to do for this job.</p>
+      <section data-workspace-content id="next-step-card" class="next-step-card"><p class="eyebrow">Your next step</p><button id="next-step-action" type="button" aria-describedby="next-step-reason">Choose your next step</button><p id="next-step-reason" class="next-step-reason"></p></section>
+      <div data-workspace-content class="hub-grid">
+        <button type="button" class="hub-tile" data-go="workspace-ledger"><span class="hub-title">01 · Learn: confirm my details</span><span class="hub-sub">Check what came from your résumé. Only details you confirm are used.</span></button>
+        <button type="button" class="hub-tile" data-go="hub-practice"><span class="hub-title">02 · Practice: mock interview</span><span class="hub-sub">Talk or type. Finish the interview to get a debrief.</span></button>
+        <button type="button" class="hub-tile" data-go="open-real-capture"><span class="hub-title">03 · Debrief: review a real interview</span><span class="hub-sub">Add notes or a transcript from an interview you already had.</span></button>
+        <button type="button" class="hub-tile" data-go="hub-drills"><span class="hub-title">04 · Drill: practice cards</span><span class="hub-sub">Recall confirmed details and see when each card is due again.</span></button>
+      </div>
+      <p data-workspace-content class="eyebrow">More ways to explore this job</p>
+      <div data-workspace-content class="hub-grid">
+          <button type="button" class="hub-tile" data-go="hub-prep"><span class="hub-title">Prep Pack</span><span class="hub-sub">Build a phone-friendly plan from the posting and facts you confirmed.</span></button>
+          <button type="button" class="hub-tile" data-go="open-immerser"><span class="hub-title">Step into the job</span><span class="hub-sub">Try a simulated week in this role.</span></button>
+          <button type="button" class="hub-tile" data-go="hub-writer"><span class="hub-title">Write my résumé or cover letter</span><span class="hub-sub">Draft from details you confirmed.</span></button>
+      </div>
+      <details data-workspace-content class="workspace-options"><summary>Job details and interview date</summary>
+      <form id="workspace-settings">
+        <label for="role-title">Role title from the posting</label><input id="role-title" maxlength="160">
+        <label for="company-name">Company name from the posting</label><input id="company-name" maxlength="160">
+        <label for="remote-preference">Your work preference</label><select id="remote-preference"><option value="unspecified">Unspecified</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">Onsite</option><option value="flexible">Flexible</option></select>
+        <label for="listing-work-mode">Mode stated in this listing</label><select id="listing-work-mode"><option value="unspecified">Unspecified</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">Onsite</option><option value="flexible">Flexible</option></select>
+        <button type="submit" class="secondary">Save workspace settings</button>
+      </form>
+      <form id="interview-date-form"><label for="interview-date">Interview date and time</label><input id="interview-date" type="datetime-local"><button type="submit" class="secondary">Save interview date</button></form>
+      </details>
+      <section data-workspace-content class="job-comparison" aria-labelledby="comparison-title">
+        <p class="eyebrow">Compare your opportunities</p><h2 id="comparison-title">Pay, benefits, and what you learn</h2>
+        <p class="meta">Posting quotes come directly from this job’s listing. Your saved pay or benefits replace that quote. Work mode and interview date use the details you saved above.</p>
+        <div id="job-comparison-table"></div>
+        <details class="workspace-options"><summary>Add or update details for this job</summary>
+          <form id="job-comparison-form">
+            <label for="pay-details">Pay you’ve confirmed</label><textarea id="pay-details" maxlength="5000" rows="2" placeholder="Range, bonus, commission, or leave blank to use the posting"></textarea>
+            <label for="benefits-details">Benefits you’ve confirmed</label><textarea id="benefits-details" maxlength="5000" rows="3" placeholder="Health, retirement, time off, perks, or leave blank to use the posting"></textarea>
+            <label for="learned-details">Facts I've learned about this job or company</label><textarea id="learned-details" maxlength="5000" rows="4" placeholder="Add details from conversations, interviews, or research"></textarea>
+            <button type="submit" class="secondary">Save job details</button>
+          </form>
+        </details>
+      </section>
+      <p data-workspace-content class="eyebrow">Connect the dots</p><h2 data-workspace-content>How you match this job</h2>
+      <p data-workspace-content>What they're asking for, and where your experience already covers it. No fake match scores, just the honest picture.</p>
+      <div data-workspace-content id="requirement-list"></div>
+      <div data-workspace-content class="actions"><button id="refresh-map" class="secondary">Refresh the match</button><button id="open-immerser" class="secondary" hidden>Step into this role</button><button id="workspace-ledger" class="secondary">Check my facts</button><button id="new-workspace" class="secondary">Add another job</button></div>
+    </section>
+
+
+    <section id="prep-pack" class="panel" hidden>
+      <p class="eyebrow">Ready for the room</p><h1>Your Prep Pack</h1>
+      <p id="prep-countdown" class="prep-countdown" hidden></p>
+      <p id="prep-progress" role="status" aria-live="polite">Starting your pack…</p>
+      <div class="actions"><button id="prep-export" type="button">Download Word (.docx)</button><button id="prep-back" type="button" class="secondary">Back to my job hub</button></div>
+      <div id="prep-sections" class="prep-sections"></div>
+    </section>
+
+    <section id="writer" class="panel" hidden>
+      <p class="eyebrow">Written only from facts you confirmed</p><h1>Résumé and cover letter</h1>
+      <div class="actions"><label for="writer-lane">Lean toward<select id="writer-lane"><option value="posting">Let the posting decide</option><option value="training_enablement">Training and enablement</option><option value="building_with_ai">Building with AI</option><option value="team_leadership">Team leadership</option></select></label><button id="write-resume" type="button">Write my résumé</button><button id="write-cover" type="button" class="secondary">Write a cover letter</button></div>
+      <p class="meta">Edit the draft before you download it. Your changes are saved in this browser for this job.</p>
+      <div id="writer-output" class="writer-review" aria-live="polite"></div>
+      <div id="writer-editor" hidden>
+        <div class="writer-edit-layout">
+          <div class="writer-edit-controls">
+            <div class="writer-choice-row">
+              <div><label for="writer-font">Font</label><select id="writer-font"><option>Noto Sans</option><option>Noto Serif</option><option>Noto Sans Mono</option></select></div>
+              <div><label for="writer-color">Accent color</label><select id="writer-color"><option value="teal">Deep teal</option><option value="navy">Navy</option><option value="plum">Plum</option><option value="slate">Slate</option></select></div>
+            </div>
+            <label for="writer-text">Edit your document</label>
+            <textarea id="writer-text" rows="24" maxlength="16000" spellcheck="true" aria-describedby="writer-edit-help"></textarea>
+            <p id="writer-edit-help" class="meta">Only this text is included in the Word and PDF downloads. Blank lines make paragraph breaks.</p>
+            <p id="writer-save-state" class="writer-save-state" role="status" aria-live="polite">Saved in this browser.</p>
+          </div>
+          <div class="writer-preview-rail">
+            <h2>Preview</h2>
+            <article id="writer-preview" class="writer-paper" aria-label="Live document preview"><pre id="writer-preview-text"></pre></article>
+          </div>
+        </div>
+        <div class="actions writer-export-actions">
+          <button id="writer-export-docx" type="button">Download Word (.docx)</button>
+          <button id="writer-export-pdf" type="button" class="secondary">Download PDF</button>
+          <button id="writer-copy" type="button" class="secondary">Copy text</button>
+        </div>
+      </div>
+      <div class="actions"><button id="writer-back" type="button" class="secondary">Back to job hub</button></div>
+    </section>
+
+    <section id="immerser" class="panel" hidden>
+      <p class="eyebrow">Step into the job</p><h1>A week in this role</h1>
+      <p>Five short scenes from a week on the job. Say what you'd do and watch it play out. Nothing here is graded, it's a rehearsal.</p>
+      <div id="immerser-content" aria-live="polite"></div>
+      <form id="immerser-action" hidden>
+        <fieldset><legend>Choose a direction</legend><div id="immerser-choices"></div></fieldset>
+        <label for="immerser-response">What would you say or do? Who would you involve?</label>
+        <textarea id="immerser-response" rows="5" maxlength="2000" required></textarea>
+        <button type="submit">Play this decision forward</button>
+      </form>
+      <div class="actions"><button id="immerser-new" class="secondary">Start a new week</button><button id="immerser-back" class="secondary">Back to my job hub</button><button id="immerser-ledger" class="secondary">Check new details</button></div>
+    </section>
+
+    <section id="library" class="panel" hidden>
+      <h1>More about you</h1>
+      <form id="library-form">
+        <label for="library-kind">What is it?</label><select id="library-kind" name="kind"><option value="resume">Another resume</option><option value="background">Brag doc, review, or notes</option><option value="jd">Another job description</option><option value="linkedin">LinkedIn export</option></select>
+        <label for="library-title">Call it something</label><input id="library-title" name="title" maxlength="120" required>
+        <label for="library-text">Paste text</label><textarea id="library-text" name="text" rows="7"></textarea>
+        <label for="library-file">Or choose PDF/DOCX</label><input id="library-file" type="file" accept=".pdf,.docx,.csv,text/csv">
+        <button type="submit">Add it</button>
+      </form>
+      <div class="panel" aria-labelledby="linkedin-guide-title">
+        <h2 id="linkedin-guide-title">Bring your LinkedIn profile</h2>
+        <p>On LinkedIn, open your profile and choose More → Save to PDF. Upload that PDF above.</p>
+        <p>For your data export, choose Settings &amp; Privacy → Data privacy → Get a copy of your data. Unzip it, then upload Profile.csv and Positions.csv one at a time above. You can also paste profile text.</p>
+        <p>Choose “LinkedIn export” as the source type. Review each extracted fact before using it.</p>
+      </div>
+      <form id="sample-form">
+        <h2>Your writing samples</h2>
+        <p>Add 2–3 pieces of your own writing. Samples guide wording only and never become career evidence.</p>
+        <label for="sample-title">Sample title</label><input id="sample-title" name="title" maxlength="120" required>
+        <label for="sample-text">Your writing</label><textarea id="sample-text" name="text" rows="5" maxlength="5000" required></textarea>
+        <button type="submit">Add sample</button>
+      </form>
+      <div id="sample-list"></div>
+      <form id="style-form">
+        <label for="style-preferences">Style preferences</label><textarea id="style-preferences" maxlength="600" rows="3" placeholder="For example: direct, warm, short sentences."></textarea>
+        <button type="submit">Use my voice in feedback</button>
+      </form>
+      <section id="coach-notes" class="quiet-card"><h2>My coach notes</h2><p class="meta">These guide future practice. They don't change your confirmed facts.</p><div id="coach-note-list"></div></section>
+      <button id="back-ledger" class="secondary">Back to my job hub</button>
+    </section>
+
+    <section id="interview" class="panel" hidden>
+      <p class="eyebrow">In the room</p><h1 id="interview-heading">Interview practice</h1>
+      <p>Three questions, each with one follow-up. Answer like you would in the room. It's fine to not have every detail.</p>
+      <p id="interview-focus" class="meta" hidden></p>
+      <div id="transcript" aria-live="polite"></div>
+      <div id="between-answer-coaching" aria-live="polite"></div>
+      <div id="voice-transcript-tools" hidden><p>If the transcript got your words wrong, fix them here first. We'll ask you to confirm anything new.</p>
+        <label for="voice-correction">Correct selected answer</label><select id="voice-turn-select"></select>
+        <textarea id="voice-correction" rows="5" maxlength="4000"></textarea>
+        <button id="save-voice-correction" type="button">Save correction</button>
+        <button id="voice-debrief" type="button" class="secondary">Open debrief</button></div>
+      <form id="answer-form">
+        <label for="answer">Your answer</label><textarea id="answer" name="answer" rows="7" maxlength="4000" required></textarea>
+        <button type="submit">Send answer</button>
+        <button id="skip-question" type="button" class="secondary">Skip, come back to it later</button>
+      </form>
+      <button id="interview-quit" type="button" class="secondary">Stop without a debrief and return to my job hub</button>
+    </section>
+
+    <section id="voice-interview" class="panel" hidden>
+      <h1>Voice mock interview</h1>
+      <p id="voice-state" role="status" aria-live="polite">Connecting…</p>
+      <div class="actions"><button id="stop-voice" type="button">End call</button>
+        <button id="voice-text-fallback" type="button" class="secondary">Use text practice</button>
+        <button id="voice-review" type="button" class="secondary" hidden>Review transcript</button></div>
+    </section>
+
+    <section id="story-dig" class="panel" hidden>
+      <h1>Tell a story</h1>
+      <p id="dig-prompt"></p>
+      <form id="dig-scene-form"><label for="dig-scene">What happened?</label><textarea id="dig-scene" rows="8" maxlength="4000" required></textarea><div class="actions"><button type="submit">Reflect it back</button><button id="dig-speak" type="button" class="secondary">Speak instead</button></div></form>
+      <div id="dig-playback" hidden><p id="dig-reflection"></p><form id="dig-confirm-form"><label for="dig-correction">Correct the scene if needed, then confirm</label><textarea id="dig-correction" rows="8" maxlength="4000" required></textarea><button type="submit">That's right, add it</button></form></div>
+      <button id="dig-back" type="button" class="secondary">Back to my job hub</button>
+    </section>
+
+    <section id="drills" class="panel" hidden>
+      <p class="eyebrow">Step 4 of 4 · Drill</p><h1>Your practice cards</h1><p>Flip a card. Recall real details you confirmed. Get feedback on what you remembered.</p>
+      <p id="drill-mode"></p><p id="drill-gaps"></p>
+      <button id="build-drills">Make fresh cards</button>
+      <div id="drill-list"></div>
+      <button id="drill-back" class="secondary">Back to my job hub</button>
+    </section>
+
+    <section id="real-capture" class="panel" hidden>
+      <p class="eyebrow">Step 3 of 4 · Debrief</p><h1>Review a real interview</h1>
+      <p>Add what they asked. We'll compare those questions with your practice plan and suggest what to work on next.</p>
+      <form id="real-capture-form">
+        <label for="capture-file">Upload a recording or transcript</label>
+        <input id="capture-file" type="file" accept=".txt,.pdf,.docx,.vtt,.srt,audio/*">
+        <p class="meta">Transcripts (.txt, .pdf, .docx, captions) are read right here. Audio files up to 2 MB are transcribed. For a full-length recording, export the transcript from your phone's recorder app and upload that.</p>
+        <label for="capture-kind">Or type it</label><select id="capture-kind"><option value="notes">Typed notes</option><option value="transcript">Pasted transcript</option><option value="voice">Voice note</option></select>
+        <label for="capture-text">Your notes or transcript</label><textarea id="capture-text" rows="10" maxlength="12000" required></textarea>
+        <div class="actions"><button type="submit">Save and analyze</button><button id="capture-speak" type="button" class="secondary">Record voice note</button></div>
+      </form>
+      <div id="real-feed"></div><button id="real-back" class="secondary">Back to my job hub</button>
+    </section>
+
+    <section id="debrief" class="panel" hidden>
+      <p class="eyebrow">Step 3 of 4 · Debrief</p><h1>Your practice debrief</h1>
+      <p>These scores are about this one practice run, not about you.</p>
+      <div id="report"></div>
+      <div class="actions"><button id="debrief-again" type="button">Practice again</button>
+      <button id="review-proposals" class="secondary">Check new details</button>
+      <button id="debrief-hub" type="button" class="secondary">Back to my job hub</button></div>
+    </section>
+  </main>
+  <details id="help" class="help">
+    <summary>Help: stuck or confused?</summary>
+    <dl>
+      <dt>What are "facts"?</dt><dd>Short, true statements pulled from what you gave us, each with the line it came from. Only the ones you confirm are used in your practice and writing.</dd>
+      <dt>It's taking a long time.</dt><dd>The AI step can take up to 30 seconds. Keep the tab open. If it stops, tap Try again or refresh. Your work is saved.</dd>
+      <dt>I got an error.</dt><dd>Wait a minute and try again. If it keeps happening, take a screenshot and send it to whoever runs this site.</dd>
+      <dt>The microphone won't work.</dt><dd>Your browser asks for permission the first time. Tap Allow. If you said no, tap the lock icon by the address bar and allow the microphone. Typing your answers works too.</dd>
+      <dt>Who can see my stuff?</dt><dd>Only you. Guest work stays in this browser tab and clears when you tap End session. Signed-in work is saved to your account. You can delete your account any time.</dd>
+      <dt>Why does it keep asking me to confirm things?</dt><dd>You check the details pulled from your sources before they're used. If a fact is wrong, fix it. If it's right, confirm it.</dd>
+      <dt>What if my sources disagree?</dt><dd>My Facts shows possible conflicts with both source quotes. You can also select two details to flag a conflict. Fix a detail, set it aside, or explain when each applies and resolve the review. Unresolved pairs stay out of new practice and writing evidence. Your original sources and review history stay available.</dd>
+      <dt>I forgot my password.</dt><dd>There's no reset email yet. Ask whoever runs this site to reset it for you.</dd>
+    </dl>
+  </details>
+  <footer>Practice grounded in the evidence you review. Open source, MIT license.</footer>
+  </div>
+  </div>
+</body>
+</html>
