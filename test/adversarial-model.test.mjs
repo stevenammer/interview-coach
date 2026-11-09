@@ -163,14 +163,14 @@ test('unknown prices and oversized payloads fail closed before reserve or networ
   assert.equal(dispatched, 0);
 });
 
-test('a successful response without usage keeps the enlarged reservation', async () => {
+test('a successful response without usage settles the enlarged reservation', async () => {
   let reserved = 0, settled = 0;
   const adapter = new GeminiAdapter({ repo: { async reserve(_bucket, micros) { reserved = micros; return 'hold'; },
     async settle() { settled += 1; } }, env: { GEMINI_API_KEY: 'offline-test', DAILY_USD_CAP: '15' },
     fetchImpl: async () => ({ ok: true, async json() { return { candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }] }; } }) });
   assert.equal((await adapter.call('gemini-3.1-pro-preview', 'test', 'x'.repeat(1_000_000))).text, '{"ok":true}');
   assert.ok(reserved > 2_000_000);
-  assert.equal(settled, 0);
+  assert.equal(settled, 1);
 });
 
 test('uncertain provider failures retain their holds without exposing response bodies', async () => {

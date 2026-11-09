@@ -26,14 +26,14 @@ test('password changes revoke every other session but keep the current session',
   } finally { await db.close(); }
 });
 
-test('uncertain spend holds stay charged and a reservation key is idempotent', async () => {
+test('expired reservations release their hold and a reservation key is idempotent', async () => {
   const { db, repo } = await database();
   try {
     const first = await repo.reserve('model', 60, 100, 'first', new Date('2026-01-01T00:00:00Z'));
     const same = await repo.reserve('model', 60, 100, 'first', new Date('2026-01-01T00:00:00Z'));
     assert.equal(same, first);
     const restored = await repo.reserve('voice', 100, 100, 'after-expiry', new Date('2026-01-01T00:16:00Z'));
-    assert.equal(restored, null, 'elapsed time cannot prove an uncertain provider call was free');
+    assert.ok(restored, 'the default 15-minute hold expires when no settlement arrives');
     assert.ok(await repo.reserve('model', 100, 100, 'next-day', new Date('2026-01-02T00:00:00Z')));
   } finally { await db.close(); }
 });

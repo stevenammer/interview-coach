@@ -18,8 +18,12 @@ export async function applyPlainInterviewer(variables, plan, model) {
 const MAX_MINUTES = 30;
 const COST_MICROS_PER_MINUTE = 200_000;
 
+export function enabled(env, key) {
+  return env[key] !== 'false' && env[key] !== '0';
+}
+
 export function voiceConfigured(env) {
-  return Boolean(env.RETELL_API_KEY && env.RETELL_AGENT_ID && env.RETELL_WEBHOOK_KEY);
+  return enabled(env, 'VOICE_ENABLED') && Boolean(env.RETELL_API_KEY && env.RETELL_AGENT_ID && env.RETELL_WEBHOOK_KEY);
 }
 
 function positiveNumber(value, fallback) {
@@ -47,7 +51,7 @@ export async function startVoice({ repo, model, env, fetchImpl = fetch, plainMod
   try {
     const capMicros = Math.floor(cap * 1e6);
     reservation = await repo.reserve('voice', micros, capMicros, randomUUID(), new Date(), owner,
-      perUserDailyCapMicros(capMicros, micros));
+      perUserDailyCapMicros(capMicros, micros), { expiresMinutes: 120 });
     if (!reservation) throw new InputError('Daily spend cap reached. Use text practice.', 503);
     const service = new CoachService(repo, model, owner);
     const started = await service.start(owner, input.workspaceId, input.persona,
@@ -193,7 +197,7 @@ export function guestVoiceLimits(env = {}) {
 }
 
 export function guestVoiceConfigured(env) {
-  return Boolean(env.RETELL_API_KEY && env.RETELL_GUEST_AGENT_ID);
+  return enabled(env, 'VOICE_ENABLED') && Boolean(env.RETELL_API_KEY && env.RETELL_GUEST_AGENT_ID);
 }
 
 export async function startGuestVoice({ repo, env, fetchImpl = fetch, plainModel = null }, service, subject, input) {
@@ -213,7 +217,15 @@ export async function startGuestVoice({ repo, env, fetchImpl = fetch, plainModel
   let released = false;
   let providerMayHaveCreated = false;
   try {
-    reservation = await repo.reserve('voice', minutes * COST_MICROS_PER_MINUTE, Math.floor(cap * 1e6), randomUUID());
+    const capMicros = Math.floor(cap * 1e6);
+    const fraction = env.GUEST_BUDGET_FRACTION === undefined ? 0.4 : Number(env.GUEST_BUDGET_FRACTION);
+    const ipCap = env.GUEST_IP_DAILY_USD === undefined ? 3 : Number(env.GUEST_IP_DAILY_USD);
+    if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1 || !Number.isFinite(ipCap) || ipCap < 0) {
+      throw new InputError('Guest spend limits are unavailable. Sign in to practice.', 503);
+    }
+    reservation = await repo.reserve('voice', minutes * COST_MICROS_PER_MINUTE, capMicros, randomUUID(), new Date(), null, null,
+      { expiresMinutes: 120, guestBudgetMicros: Math.floor(capMicros * fraction), guestSubject: subject,
+        guestSubjectCapMicros: Math.floor(ipCap * 1e6) });
     if (!reservation) throw new InputError('Daily spend cap reached. Use text practice.', 503);
     const started = await service.start('guest', input.workspaceId, input.persona,
       input.difficulty ?? 2, input.practiceMode ?? 'mock');

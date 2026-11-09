@@ -57,7 +57,7 @@ test('site storage and tiny-upload metadata counts are bounded across accounts',
   } finally { await db.close(); }
 });
 
-test('spend reservations serialize idempotency and per-user ceilings; voice holds never expire automatically', async () => {
+test('spend reservations serialize idempotency and per-user ceilings; live voice holds last 120 minutes', async () => {
   const { db, repo, user } = await fixture();
   try {
     const now = new Date('2026-01-01T00:00:00Z');
@@ -68,7 +68,7 @@ test('spend reservations serialize idempotency and per-user ceilings; voice hold
     assert.equal(race.filter(Boolean).length, 1);
     await assert.rejects(repo.reserve('model', -1, 100, 'negative', now));
     const voiceDay = new Date('2026-01-02T00:00:00Z');
-    assert.ok(await repo.reserve('voice', 60, 100, 'voice', voiceDay));
+    assert.ok(await repo.reserve('voice', 60, 100, 'voice', voiceDay, null, null, { expiresMinutes: 120 }));
     assert.equal(await repo.reserve('model', 50, 100, 'after-fifteen', new Date('2026-01-02T00:16:00Z')), null);
     assert.ok(await repo.reserve('model', 100, 100, 'tomorrow', new Date('2026-01-03T00:00:00Z')));
     assert.equal(await repo.claimGuestVoicePool(6, 5), null);

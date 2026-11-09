@@ -18,7 +18,7 @@ test('Vertex Flash spend accounting includes thought tokens and the introductory
 
 async function database() {
   const db = new PGlite();
-  for (const file of ['001_core.sql', '002_jobs.sql', '003_ingestion.sql', '004_workspaces.sql', '005_rewrites.sql', '006_interviewer.sql', '007_story_dig.sql', '008_drills.sql', '009_real_interviews.sql', '010_fact_gate.sql', '011_immerser.sql', '012_voice.sql', '013_guest_voice.sql', '015_debrief_input_hash.sql', '016_job_comparison.sql', '019_job_hunt_tracker.sql', '020_security_audit.sql', '021_security_hardening_3.sql', '022_fact_conflict_reviews.sql', '023_resource_guard.sql']) {
+  for (const file of ['001_core.sql', '002_jobs.sql', '003_ingestion.sql', '004_workspaces.sql', '005_rewrites.sql', '006_interviewer.sql', '007_story_dig.sql', '008_drills.sql', '009_real_interviews.sql', '010_fact_gate.sql', '011_immerser.sql', '012_voice.sql', '013_guest_voice.sql', '015_debrief_input_hash.sql', '016_job_comparison.sql', '019_job_hunt_tracker.sql', '020_security_audit.sql', '021_security_hardening_3.sql', '022_fact_conflict_reviews.sql', '023_resource_guard.sql', '024_spend_guard_subject.sql']) {
     await db.exec(await readFile(new URL(`../netlify/database/migrations/${file}`, import.meta.url), 'utf8'));
   }
   return { db, repo: new Repository(pgliteSql(db)) };
@@ -247,7 +247,7 @@ test('malformed model JSON gets exactly one repair; transport fallback is bounde
   } finally { await db.close(); }
 });
 
-test('reported Gemini usage settles a reservation; unknown usage retains it', async () => {
+test('reported Gemini usage settles a reservation; unknown usage settles the full estimate', async () => {
   const { db, repo } = await database();
   try {
     const model = new GeminiAdapter({ repo, env: { GEMINI_API_KEY: 'fake' }, fetchImpl: async () => ({
@@ -265,7 +265,8 @@ test('reported Gemini usage settles a reservation; unknown usage retains it', as
     }) });
     await unknown.generate('unmetered', 'prompt', (value) => value.ok);
     const afterUnknown = (await repo.sql('SELECT * FROM spend_days'))[0];
-    assert.equal(Number(afterUnknown.reserved_micros), 250000);
+    assert.equal(Number(afterUnknown.reserved_micros), 0);
+    assert.ok(Number(afterUnknown.settled_micros) >= 250000);
   } finally { await db.close(); }
 });
 

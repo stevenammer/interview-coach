@@ -18,6 +18,7 @@ async function database() {
   }
   await db.exec(await readFile(new URL('../netlify/database/migrations/021_security_hardening_3.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../netlify/database/migrations/023_resource_guard.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../netlify/database/migrations/024_spend_guard_subject.sql', import.meta.url), 'utf8'));
   return { db, repo: new Repository(pgliteSql(db)) };
 }
 

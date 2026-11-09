@@ -888,21 +888,28 @@ export class Repository {
     [owner, slotId, state, proposalFactId, reason]))[0] ?? null;
   }
 
-  async reserve(bucket, micros, capMicros, key, now = new Date(), owner = null, userCapMicros = null, ttlMs = 15 * 60_000) {
+  async reserve(bucket, micros, capMicros, key, now = new Date(), owner = null, userCapMicros = null, options = {}) {
+    const ttlMs = (options.expiresMinutes ?? 15) * 60_000;
+    const { guestBudgetMicros = null, guestSubject = null, guestSubjectCapMicros = null } = options;
     if (![micros, capMicros, ttlMs].every((value) => Number.isSafeInteger(value) && value > 0) ||
-        (userCapMicros !== null && (!Number.isSafeInteger(userCapMicros) || userCapMicros <= 0))) {
+        (userCapMicros !== null && (!Number.isSafeInteger(userCapMicros) || userCapMicros <= 0)) ||
+        (guestBudgetMicros !== null && (!Number.isSafeInteger(guestBudgetMicros) || guestBudgetMicros < 0)) ||
+        (guestSubjectCapMicros !== null && (!Number.isSafeInteger(guestSubjectCapMicros) || guestSubjectCapMicros < 0)) ||
+        (guestSubject !== null && typeof guestSubject !== 'string')) {
       throw new Error('Invalid spend reservation');
     }
-    return this.withResourceLock((repo) => repo.reserveLocked(bucket, micros, capMicros, key, now, owner, userCapMicros, ttlMs));
+    return this.withResourceLock((repo) => repo.reserveLocked(bucket, micros, capMicros, key, now, owner, userCapMicros,
+      ttlMs, guestBudgetMicros, guestSubject, guestSubjectCapMicros));
   }
 
-  async reserveLocked(bucket, micros, capMicros, key, now, owner, userCapMicros, ttlMs) {
+  async reserveLocked(bucket, micros, capMicros, key, now, owner, userCapMicros, ttlMs, guestBudgetMicros, guestSubject, guestSubjectCapMicros) {
     const day = now.toISOString().slice(0, 10);
     const existing = (await this.sql('SELECT id FROM spend_reservations WHERE idempotency_key=$1', [key]))[0];
     if (existing) return existing.id;
-    // A lost response can still be billed. Keep uncertain holds charged for
-    // their UTC day until usage or a definitive no-charge result settles them.
-    // The next day's independent bucket restores capacity without overspend.
+    const expired = await this.sql(`UPDATE spend_reservations SET state='expired'
+      WHERE state='reserved' AND expires_at<$1 RETURNING utc_date,estimated_micros`, [now]);
+    for (const row of expired) await this.sql(`UPDATE spend_days SET reserved_micros=GREATEST(0,reserved_micros-$2)
+      WHERE utc_date=$1`, [row.utc_date, row.estimated_micros]);
     await this.sql(`INSERT INTO spend_days(utc_date,cap_micros) VALUES($1,$2)
       ON CONFLICT(utc_date) DO UPDATE SET cap_micros=EXCLUDED.cap_micros`, [day, capMicros]);
     if (owner && userCapMicros !== null) {
@@ -910,22 +917,35 @@ export class Repository {
         FROM spend_reservations WHERE user_id=$1 AND utc_date=$2 AND state IN ('reserved','settled')`, [owner, day]);
       if (Number(userTaken[0].micros) + micros > userCapMicros) return null;
     }
+    if (guestBudgetMicros !== null) {
+      const guestTaken = await this.sql(`SELECT coalesce(sum(CASE WHEN state='settled' THEN actual_micros ELSE estimated_micros END),0)::bigint AS micros
+        FROM spend_reservations WHERE user_id IS NULL AND utc_date=$1 AND state IN ('reserved','settled')`, [day]);
+      if (Number(guestTaken[0].micros) + micros > guestBudgetMicros) return null;
+    }
+    if (guestSubject !== null && guestSubjectCapMicros !== null) {
+      const subjectTaken = await this.sql(`SELECT coalesce(sum(CASE WHEN state='settled' THEN actual_micros ELSE estimated_micros END),0)::bigint AS micros
+        FROM spend_reservations WHERE subject_hmac=$1 AND utc_date=$2 AND state IN ('reserved','settled')`, [guestSubject, day]);
+      if (Number(subjectTaken[0].micros) + micros > guestSubjectCapMicros) return null;
+    }
     const rows = await this.sql(`WITH taken AS (
       UPDATE spend_days SET reserved_micros=reserved_micros+$2
       WHERE utc_date=$1 AND reserved_micros+settled_micros+$2<=cap_micros
       RETURNING utc_date
-    ) INSERT INTO spend_reservations(id,utc_date,bucket,estimated_micros,idempotency_key,expires_at,user_id)
-      SELECT $3,utc_date,$4,$2,$5,$6::timestamptz+($8::bigint * interval '1 millisecond'),$7::uuid FROM taken
+    ) INSERT INTO spend_reservations(id,utc_date,bucket,estimated_micros,idempotency_key,expires_at,user_id,subject_hmac)
+      SELECT $3,utc_date,$4,$2,$5,$6::timestamptz+($8::bigint * interval '1 millisecond'),$7::uuid,$9 FROM taken
       ON CONFLICT(idempotency_key) DO NOTHING RETURNING id`,
-    [day, micros, id(), bucket, key, now, owner, ttlMs]);
+    [day, micros, id(), bucket, key, now, owner, ttlMs, guestSubject]);
     return rows[0]?.id ?? null;
   }
 
   async settle(reservationId, actualMicros) {
-    await this.sql(`WITH moved AS (
-      UPDATE spend_reservations SET actual_micros=$2,state='settled'
-      WHERE id=$1 AND state='reserved' RETURNING utc_date,estimated_micros
-    ) UPDATE spend_days d SET reserved_micros=d.reserved_micros-m.estimated_micros,
+    await this.sql(`WITH prior AS (
+      SELECT id,utc_date,estimated_micros,state FROM spend_reservations
+      WHERE id=$1 AND state IN ('reserved','expired')
+    ), moved AS (
+      UPDATE spend_reservations s SET actual_micros=$2,state='settled' FROM prior p
+      WHERE s.id=p.id RETURNING p.utc_date,p.estimated_micros,p.state
+    ) UPDATE spend_days d SET reserved_micros=GREATEST(0,d.reserved_micros-CASE WHEN m.state='reserved' THEN m.estimated_micros ELSE 0 END),
       settled_micros=d.settled_micros+$2 FROM moved m WHERE d.utc_date=m.utc_date`,
     [reservationId, actualMicros]);
   }

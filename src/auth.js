@@ -41,8 +41,24 @@ export function sessionToken(request) {
 }
 
 export function abuseSubject(request, secret, platformIp) {
-  const ip = platformIp || request.headers.get('x-nf-client-connection-ip') || 'unknown';
+  const ip = normalizeAbuseIp(platformIp || request.headers.get('x-nf-client-connection-ip') || 'unknown');
   return createHmac('sha256', secret).update(ip).digest('hex');
+}
+
+export function normalizeAbuseIp(value) {
+  const ip = String(value).trim().toLowerCase();
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return mapped[1];
+  // Privacy extensions rotate the lower 64 bits. A /64 is the normal host network.
+  if (ip.includes(':')) {
+    const [before = '', after = ''] = ip.split('::');
+    const left = before ? before.split(':').filter(Boolean) : [];
+    const right = after ? after.split(':').filter(Boolean) : [];
+    const groups = [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right]
+      .map((part) => Number.parseInt(part || '0', 16).toString(16));
+    if (groups.length === 8 && groups.every((part) => /^[0-9a-f]+$/.test(part))) return `${groups.slice(0, 4).join(':')}::/64`;
+  }
+  return ip || 'unknown';
 }
 
 export function accountAbuseSubject(username, secret) {

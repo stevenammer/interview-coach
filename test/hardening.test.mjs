@@ -8,7 +8,7 @@ import { confidenceFeedback, confidenceFeedbackValid, confidenceFallback, number
 import { Repository } from '../src/repository.js';
 import { pgliteSql } from '../src/db.js';
 
-test('definitive client rejections release reservations; server errors and unknown timeouts do not', async () => {
+test('definitive client rejections release reservations; unknown timeouts settle the full estimate', async () => {
   const settled = [];
   const repo = { async reserve() { return `r${settled.length}`; }, async settle(id, amount) { settled.push([id, amount]); } };
   const env = { GEMINI_API_KEY: 'key' };
@@ -19,7 +19,7 @@ test('definitive client rejections release reservations; server errors and unkno
   assert.deepEqual(settled.map(([, amount]) => amount), [0, 0], 'a 500 may arrive after billable work started');
   const adapter = new GeminiAdapter({ repo, env, fetchImpl: async () => { throw new TypeError('network down'); } });
   await assert.rejects(adapter.call('gemini-3.8-flash', 'test', 'hello'));
-  assert.equal(settled.length, 2);
+  assert.deepEqual(settled.map(([, amount]) => amount), [0, 0, 250000]);
 });
 
 test('confidence feedback requires a specific opening and exactly one next step, with a safe fallback', () => {

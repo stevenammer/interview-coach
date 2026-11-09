@@ -79,6 +79,14 @@ export class GeminiAdapter {
     this.env = env;
   }
 
+  forGuest(guestSubject) {
+    return {
+      generate: (task, prompt, validate, options = {}) => this.generate(task, prompt, validate, { ...options, guestSubject }),
+      transcribe: (base64, mimeType, options = {}) => this.transcribe(base64, mimeType, { ...options, guestSubject }),
+      readImage: (base64, mimeType, options = {}) => this.readImage(base64, mimeType, { ...options, guestSubject }),
+    };
+  }
+
   // options.preferFast tries the lighter model first (short rewrites like "Say it plain");
   // options.passes: 1 skips the repair pass; options.timeoutMs shortens each attempt.
   async generate(task, prompt, validate, options = {}) {
@@ -92,7 +100,7 @@ export class GeminiAdapter {
       const request = pass === 0 ? prompt : `${prompt}\n\nYour previous response was invalid. Return only JSON matching the requested shape, no markdown.`;
       for (const model of models) {
         try {
-          const result = await this.call(model, task, request, null, options.timeoutMs, options.owner ?? null);
+          const result = await this.call(model, task, request, null, options.timeoutMs, options.owner ?? null, options);
           const parsed = parseStructured(result.text, validate);
           if (parsed) return { data: parsed, modelId: model };
           // Shape only, never content: enough to tell a cut-off reply from a schema miss in the function logs.
@@ -120,7 +128,8 @@ export class GeminiAdapter {
     throw error;
   }
 
-  async transcribe(base64, mimeType, owner = null) {
+  async transcribe(base64, mimeType, options = {}) {
+    if (typeof options === 'string') options = { owner: options };
     if (typeof base64 !== 'string' || base64.length > 2800000 ||
       !['audio/webm', 'audio/mp4', 'audio/ogg'].includes(mimeType)) {
       throw new Error('Unsupported or oversized audio note');
@@ -131,7 +140,7 @@ export class GeminiAdapter {
       try {
         const result = await this.call(model, 'transcribe_voice',
           'Transcribe this interview voice note faithfully. Return JSON {"text":"..."}. Do not infer words you cannot hear.',
-          { mimeType, data: base64 }, MODEL_CONFIG.timeoutMs, owner);
+          { mimeType, data: base64 }, MODEL_CONFIG.timeoutMs, options.owner ?? null, options);
         const data = parseStructured(result.text, (value) => value && isText(value.text, 12000));
         if (data) return data.text;
       } catch (error) {
@@ -142,7 +151,8 @@ export class GeminiAdapter {
     throw new ModelOutputError('transcribe_voice');
   }
 
-  async readImage(base64, mimeType, owner = null) {
+  async readImage(base64, mimeType, options = {}) {
+    if (typeof options === 'string') options = { owner: options };
     if (typeof base64 !== 'string' || base64.length > 2800000 ||
       !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
       throw new Error('Unsupported or oversized image');
@@ -153,7 +163,7 @@ export class GeminiAdapter {
       try {
         const result = await this.call(model, 'read_image',
           'This is a screenshot or photo of a job posting or a resume. Copy all of its text exactly as written, in reading order, keeping headings and bullets on their own lines. Leave out app chrome like buttons, menus, and ads. Do not summarize, fix, or add anything. If there is no readable text, return an empty string. Return JSON {"text":"..."}.',
-          { mimeType, data: base64 }, MODEL_CONFIG.timeoutMs, owner);
+          { mimeType, data: base64 }, MODEL_CONFIG.timeoutMs, options.owner ?? null, options);
         const data = parseStructured(result.text, (value) => value && typeof value.text === 'string' && value.text.length <= 12000);
         if (data) return data.text.trim();
       } catch (error) {
@@ -164,7 +174,7 @@ export class GeminiAdapter {
     throw new ModelOutputError('read_image');
   }
 
-  async call(model, task, prompt, inlineAudio = null, timeoutMs = MODEL_CONFIG.timeoutMs, owner = null) {
+  async call(model, task, prompt, inlineAudio = null, timeoutMs = MODEL_CONFIG.timeoutMs, owner = null, options = {}) {
     const provider = providerFor(this.env);
     if (!provider.key) {
       const error = new Error(provider.endpoint === VERTEX_ENDPOINT ?
@@ -207,7 +217,14 @@ export class GeminiAdapter {
     try {
       const capMicros = Math.floor(cap * 1e6);
       const userCapMicros = owner ? perUserDailyCapMicros(capMicros) : null;
-      reservation = await this.repo.reserve(task, micros, capMicros, randomUUID(), new Date(), owner, userCapMicros);
+      const fraction = this.env.GUEST_BUDGET_FRACTION === undefined ? 0.4 : Number(this.env.GUEST_BUDGET_FRACTION);
+      const ipCap = this.env.GUEST_IP_DAILY_USD === undefined ? 3 : Number(this.env.GUEST_IP_DAILY_USD);
+      if (options.guestSubject && (!Number.isFinite(fraction) || fraction < 0 || fraction > 1 ||
+          !Number.isFinite(ipCap) || ipCap < 0)) throw new Error('Invalid guest spend limits');
+      const guestOptions = options.guestSubject && Number.isFinite(fraction) && fraction >= 0 && fraction <= 1 &&
+        Number.isFinite(ipCap) && ipCap >= 0 ? { guestBudgetMicros: Math.floor(capMicros * fraction),
+          guestSubject: options.guestSubject, guestSubjectCapMicros: Math.floor(ipCap * 1e6) } : {};
+      reservation = await this.repo.reserve(task, micros, capMicros, randomUUID(), new Date(), owner, userCapMicros, guestOptions);
     } catch {
       const error = new Error('Spend accounting is unavailable');
       error.code = 'accounting_unavailable';
@@ -246,12 +263,15 @@ export class GeminiAdapter {
       const body = await response.json();
       const actual = usageMicros(model, body.usageMetadata);
       // A 2xx reply is definitive even if its content is unusable. Settle before validating it.
-      if (actual !== null) await settle(actual);
+      await settle(actual ?? micros);
       const result = body.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
       if (!result) throw new Error('Gemini returned no JSON');
       return { text: result };
     } catch (error) {
-      if (error.name === 'AbortError' || error instanceof TypeError) error.retryable = true;
+      if (error.name === 'AbortError' || error instanceof TypeError) {
+        await settle(micros);
+        error.retryable = true;
+      }
       throw error;
     } finally {
       clearTimeout(timer);

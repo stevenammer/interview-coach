@@ -18,6 +18,9 @@ const PENDING_UPLOAD_MAX_BYTES = 20_000_000;
 // declared reservation even when chunks arrive concurrently or are replayed.
 const UPLOAD_CHUNK_BYTES = 1_400_000;
 const boundedCoachNote = (value) => typeof value === 'string' && value.trim().length > 0 && value.length <= 500;
+const featureEnabled = (env, key) => env[key] !== 'false' && env[key] !== '0';
+const positiveInteger = (value, fallback) => value === undefined ? fallback :
+  (Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null);
 
 const GUEST_FREE_OPS = new Set(['ledger', 'requirements', 'workspaces', 'drills', 'history', 'real_feed',
   'fact_conflicts', 'report_fact_conflict', 'update_fact_conflict',
@@ -65,6 +68,9 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
 
       if (op === 'signup' || op === 'login') {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
+        if (op === 'signup' && !featureEnabled(env, 'SIGNUP_ENABLED')) {
+          return json({ error: 'signup_disabled', message: 'New accounts are temporarily unavailable. Please try again later.' }, 503);
+        }
         if (!await repo.abuse(op, subject, 12)) return json({ error: 'rate_limited' }, 429);
         const { username, password } = data;
         if (!validUsername(username) || typeof password !== 'string' ||
@@ -76,7 +82,12 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         }
         let user;
         if (op === 'signup') {
+          const signupCap = positiveInteger(env.SIGNUP_DAILY_CAP, 200);
+          if (!signupCap) return json({ error: 'signup_unavailable', message: 'New accounts are temporarily unavailable. Please try again later.' }, 503);
           if (await repo.userByName(username)) throw new InputError('Username is unavailable.');
+          if (!await repo.abuse('signup_all', 'all', signupCap, 1440)) {
+            return json({ error: 'signup_cap_reached', message: 'New accounts are temporarily unavailable. Please try again tomorrow.' }, 503);
+          }
           user = await repo.createUser(username, await passwordHash(password));
         } else {
           const found = await repo.userByName(username);
@@ -136,6 +147,12 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
       const guest = data.guest === true;
       if (!user && !guest) return json({ error: 'authentication_required' }, 401);
       if (guest && user) return json({ error: 'choose_account_or_guest' }, 400);
+      if (guest && !featureEnabled(env, 'GUESTS_ENABLED')) {
+        return json({ error: 'guests_disabled', message: 'Guest practice is temporarily unavailable. Please sign in to continue.' }, 503);
+      }
+      if ((op === 'voice_start' || op === 'voice_status') && !featureEnabled(env, 'VOICE_ENABLED')) {
+        return json({ error: 'voice_disabled', message: 'Voice practice is temporarily unavailable. Text practice is ready below.' }, 503);
+      }
       if (user && (!await repo.abuse('account_api', accountAbuseSubject(user.id, abuseKey), 1200, 60) ||
           !await repo.abuse('account_api_all', 'all', 20000, 60))) return json({ error: 'rate_limited' }, 429);
       if (op === 'plain') {
@@ -169,11 +186,19 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
           'That\'s a lot of practice for one hour. Take a breather and try again in a bit, or sign up to keep going.' :
           'Too many taps in a short time. Wait a minute and try again.' }, 429);
       }
+      if (user && !GUEST_FREE_OPS.has(op)) {
+        const modelLimit = positiveInteger(env.MODEL_OPS_PER_HOUR_PER_ACCOUNT, 120);
+        if (!modelLimit) return json({ error: 'model_rate_limit_unavailable', message: 'AI practice is temporarily unavailable. Please try again later.' }, 503);
+        if (!await repo.abuse('model_account', user.id, modelLimit, 60)) {
+          return json({ error: 'rate_limited', message: 'You have reached the hourly AI practice limit. Please try again in a bit.' }, 429);
+        }
+      }
       const guestState = data.state ?? {};
       if (guest && (typeof guestState !== 'object' || Array.isArray(guestState))) throw new InputError('Invalid guest state.');
       const profileRepo = guest ? new GuestRepository(guestState) : repo;
       const owner = user?.id ?? 'guest';
-      const service = new CoachService(profileRepo, model, user?.id ?? null);
+      const requestModel = guest && typeof model?.forGuest === 'function' ? model.forGuest(subject) : model;
+      const service = new CoachService(profileRepo, requestModel, user?.id ?? null);
       let result;
       if (op === 'job_status' && request.method === 'POST' && user) {
         const job = await repo.job(owner, data.jobId);
@@ -316,7 +341,8 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         if (!bytes.length || bytes.length > 2000000 || bytes.toString('base64') !== data.base64) {
           throw new InputError('Voice note is invalid or over 2 MB.');
         }
-        result = { text: await model.transcribe(data.base64, data.mimeType, user?.id ?? null) };
+        result = { text: await requestModel.transcribe(data.base64, data.mimeType,
+          { owner: user?.id ?? null, ...(guest ? { guestSubject: subject } : {}) }) };
       }
       else if (op === 'read_image' && request.method === 'POST') {
         if (typeof data.base64 !== 'string' || data.base64.length > 2700000 ||
@@ -327,7 +353,8 @@ export function createHandler({ repo, model, env = process.env, platformIp = nul
         if (!bytes.length || bytes.length > 2000000 || bytes.toString('base64') !== data.base64) {
           throw new InputError('That image is invalid or over 2 MB.');
         }
-        result = { text: await model.readImage(data.base64, data.mimeType, user?.id ?? null) };
+        result = { text: await requestModel.readImage(data.base64, data.mimeType,
+          { owner: user?.id ?? null, ...(guest ? { guestSubject: subject } : {}) }) };
       }
       else if (op === 'real_feed' && request.method === 'POST') result = await service.realInterviewFeed(owner, data.workspaceId);
       else if (op === 'workspace_map' && request.method === 'POST') {
