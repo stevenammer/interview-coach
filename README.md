@@ -4,6 +4,8 @@ Interview prep built around facts you confirm.
 
 You paste your résumé and a job posting. The app pulls out the claims in your résumé and shows the exact line each one came from. You confirm what's true. Then you practice a mock interview (typed or by voice), and the debrief and practice cards are built from those confirmed facts, not from guesses.
 
+**Try the live version:** [ammer-interview-coach-app.netlify.app](https://ammer-interview-coach-app.netlify.app). It's free, and you can practice as a guest without an account. It runs under daily spend limits, so if a day's budget runs out it pauses until tomorrow instead of running up a bill. Every limit is listed in [docs/SPEND_GUARDS.md](docs/SPEND_GUARDS.md).
+
 > **The example workspace is real.** It's Steven Ammer practicing in public for a Sales Training Academy team lead role at his current employer. It's built from public information and his own words. No employer materials are used. This project isn't affiliated with or endorsed by any employer.
 
 I built it for a real job search. It's a working side project, not a polished product.
