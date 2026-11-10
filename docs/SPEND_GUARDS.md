@@ -8,8 +8,8 @@ Interview Coach ships with strict defaults. Raise any of them with the environme
 | Signed-in share of the daily ledger | none | 50% of the daily cap, with room for one full voice reservation | New signed-in model or voice reservations return 503. |
 | Guest share of the daily ledger | `GUEST_BUDGET_FRACTION` | `0.4` | Guest model and voice reservations return 503. |
 | Guest IP daily ledger | `GUEST_IP_DAILY_USD` | `3.00` | Guest model and voice reservations from that IP bucket return 503. IPv6 uses a /64 bucket. |
-| Model reservation | none | `$0.25` per attempt | A timeout or response without usage metadata settles at the full reservation. A definite non-2xx provider rejection releases it. |
-| Reservation lifetime | none | 15 minutes for models, 120 minutes for voice | Expired rows release their hold. A late voice settlement is still recorded. |
+| Model reservation | none | At least `$0.25` per attempt; larger byte-based input and output estimates can require more | A timeout or response without usage metadata settles at the full reservation. A definite 4xx provider rejection other than HTTP 408 releases it; unknown outcomes retain it. |
+| Reservation expiry | none | 15 minutes for models, 120 minutes for voice | An unknown hold remains for its original UTC day even after its expiry time. After the day changes, an expired hold can be released; late actual usage is recorded on the original day. |
 | Signed-in voice call length | `VOICE_MAX_MINUTES` | 10 minutes | Retell receives the call maximum. |
 | Signed-in voice minutes | `VOICE_DAILY_MINUTES_LIMIT` | 90 minutes | Voice start returns 503. |
 | Guest voice call length | `GUEST_VOICE_MAX_MINUTES` | 5 minutes | Retell receives the call maximum. |
@@ -27,7 +27,7 @@ The ledger uses UTC calendar days. The code stores only HMACs of abuse subjects,
 
 ## Defaults at a glance
 
-The daily ledger is `$15` (`DAILY_USD_CAP`). Guests may use 40% of it, which is `$6.00`, so about six 5-minute guest voice calls a day in total, or a lot of text practice. A 5-minute guest voice call reserves `$1.00` at `$0.20` a minute. The fixed `$3.00` guest-IP ledger therefore permits up to three such calls from one IP bucket. A signed-in voice call is 10 minutes (`VOICE_MAX_MINUTES`) and reserves `$2.00` at `$0.20` a minute. Each signed-in account is held to half of the cap, `$7.50`, which permits about three such calls before its spend share is exhausted. The 60-minute guest pool and 90-minute signed-in voice limit still apply.
+The daily ledger is `$15` (`DAILY_USD_CAP`). Guests may use 40% of it, which is `$6.00`, so about six 5-minute guest voice calls a day in total, or a lot of text practice. A 5-minute guest voice call reserves `$1.00` at `$0.20` a minute. The fixed `$3.00` guest-IP ledger has room for three such reservations, but the default two-calls-per-IP limit is stricter. A signed-in voice call is 10 minutes (`VOICE_MAX_MINUTES`) and reserves `$2.00` at `$0.20` a minute. Each signed-in account is held to half of the cap, `$7.50`, which permits about three such calls before its spend share is exhausted. The 60-minute guest pool and 90-minute signed-in voice limit still apply.
 
 ## Provider controls
 

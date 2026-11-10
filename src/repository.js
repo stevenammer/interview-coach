@@ -907,7 +907,7 @@ export class Repository {
     const existing = (await this.sql('SELECT id FROM spend_reservations WHERE idempotency_key=$1', [key]))[0];
     if (existing) return existing.id;
     const expired = await this.sql(`UPDATE spend_reservations SET state='expired'
-      WHERE state='reserved' AND expires_at<$1 RETURNING utc_date,estimated_micros`, [now]);
+      WHERE state='reserved' AND expires_at<$1 AND utc_date<$2 RETURNING utc_date,estimated_micros`, [now, day]);
     for (const row of expired) await this.sql(`UPDATE spend_days SET reserved_micros=GREATEST(0,reserved_micros-$2)
       WHERE utc_date=$1`, [row.utc_date, row.estimated_micros]);
     await this.sql(`INSERT INTO spend_days(utc_date,cap_micros) VALUES($1,$2)

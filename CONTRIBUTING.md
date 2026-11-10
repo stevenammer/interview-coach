@@ -5,12 +5,12 @@ Thanks for looking. This is a small project, so keep changes small and focused.
 ## Setup
 
 ```sh
-npm install
+npm ci
 npm test
 npm run dev
 ```
 
-Node 20 or newer. Tests run offline and need no keys.
+Node 22.22 or newer; `.nvmrc` pins the CI runtime. Tests run offline and need no keys.
 
 ## Ground rules
 
@@ -20,7 +20,7 @@ Node 20 or newer. Tests run offline and need no keys.
 - Don't commit keys, `.env` files, real résumés, or real people's data. Use made-up examples.
 - Keep the core promise: generated text must stay tied to facts the user confirmed. If a change loosens a check in `src/truth.js`, `src/writing.js`, or `src/plain.js`, say so in the pull request.
 - Plain language in the UI. Short sentences, no hype.
-- `public/vendor` is third-party code. Rebuild bundles with `npm run build:documents` and `npm run build:imports` rather than editing them by hand.
+- `public/vendor` is third-party code. Rebuild bundles with `npm run build:documents` and `npm run build:imports` rather than editing them by hand. Rebuild the voice client with `node scripts/build-retell.mjs`.
 
 ## Pull requests
 

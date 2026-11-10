@@ -4,11 +4,15 @@ Interview prep built around facts you confirm.
 
 You paste your résumé and a job posting. The app pulls out the claims in your résumé and shows the exact line each one came from. You confirm what's true. Then you practice a mock interview (typed or by voice), and the debrief and practice cards are built from those confirmed facts, not from guesses.
 
+[![Offline checks](https://github.com/stevenammer/interview-coach/actions/workflows/ci.yml/badge.svg)](https://github.com/stevenammer/interview-coach/actions/workflows/ci.yml)
+
 **Try the live version:** [ammer-interview-coach-app.netlify.app](https://ammer-interview-coach-app.netlify.app). It's free, and you can practice as a guest without an account. It runs under daily spend limits, so if a day's budget runs out it pauses until tomorrow instead of running up a bill. Every limit is listed in [docs/SPEND_GUARDS.md](docs/SPEND_GUARDS.md).
 
 > **The example workspace is real.** It's Steven Ammer practicing in public for a Sales Training Academy team lead role at his current employer. It's built from public information and his own words. No employer materials are used. This project isn't affiliated with or endorsed by any employer.
 
 I built it for a real job search. It's a working side project, not a polished product.
+
+[![Interview Coach, practice the conversation](public/share-card.png)](https://ammer-interview-coach-app.netlify.app/)
 
 ## Practice in public
 
@@ -24,8 +28,8 @@ The example workspace is work in progress. The answers are drafts, each marked "
 - AI feedback can be wrong. Treat it as a practice partner, not a judge. The app checks some things in code (quotes must appear in your text, numbers must appear in the facts you cite), but it can't catch everything.
 - This is not career, hiring, or legal advice.
 - The hosted setup targets Netlify (Netlify Functions, Netlify Database, Netlify Blobs). There's a local dev server, but file uploads are off there.
-- AI steps need your own key (Gemini Developer API or Vertex AI). There's no demo mode with canned answers. Without a key the app loads and every AI step says the model isn't configured.
-- Voice interviews need a Retell account and the vendored Retell browser client. Voice is optional and untested without that account.
+- The hosted app supplies its AI connection; guests don't need an API key. If you self-host, configure your own Gemini Developer API or Vertex AI key. The practice workspace can be inspected without generating an AI response; new AI steps need a configured provider.
+- Voice is optional. Self-hosting voice needs a Retell account and the vendored browser client. The latest release checks verified live text AI and offline voice behavior; they did not include a real voice call.
 - Storage and rate limits are conservative side-project defaults. See `SECURITY.md` before allowing untrusted accounts.
 - Accounts are username and password only. There's no password reset or email. Whoever runs the site resets passwords by hand.
 - English only. No accessibility audit beyond basic labels and keyboard use.
@@ -73,7 +77,7 @@ Open http://localhost:8888. Data is kept in `./data/pglite`. Use `DEV_DB=memory 
 
 Deployed sites require `VERTEX_API_KEY` (the code refuses to fall back to another provider on Netlify). `GEMINI_API_KEY` works for local use.
 
-For an existing database that already applied `023_spend_guard_subject.sql` with the same SQL as canonical `024_spend_guard_subject.sql`, set the build environment variable `IC_MIGRATION_HISTORY=legacy-spend-23`. This prepares the already-applied SQL under its historical name and puts the resource guard at 024. New databases should leave the variable unset. Verify the actual migration history and target database before deployment, including previews. Never edit applied migration SQL.
+For an existing database that already applied `023_spend_guard_subject.sql` with the same SQL as canonical `024_spend_guard_subject.sql`, set the build environment variable `IC_MIGRATION_HISTORY=legacy-spend-23`. This prepares the already-applied SQL under its historical name and puts the resource guard at 024. New databases should leave the variable unset. Verify the actual migration history and target database before deployment, including previews. Legacy mode changes only the generated artifact names: compare `.netlify/runtime-migrations` with production history. Never rename or rerun canonical SQL just to silence a filename mismatch in a status tool. Never edit applied migration SQL.
 
 ## Configuration
 
@@ -89,6 +93,7 @@ Names only are in `.env.example`. Never commit real values.
 | `ALLOWED_ORIGINS` | No | Comma-separated origins allowed to POST to `/api` (default: same origin) |
 | `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_GUEST_AGENT_ID`, `RETELL_WEBHOOK_KEY` | Voice only | Retell voice interview setup |
 | `SIGNED_IN_MAX_CALL_MINUTES`, `GUEST_MAX_CALL_MINUTES`, `VOICE_MAX_MINUTES`, `VOICE_DAILY_MINUTES_LIMIT`, `GUEST_VOICE_*` | No | Voice call limits |
+| `IC_MIGRATION_HISTORY` | Existing legacy deployments only | `legacy-spend-23` preserves an already-applied historical migration order; leave unset for new databases |
 | `PORT`, `DEV_DB` | No | Dev server port and `memory` mode |
 | `PLAYWRIGHT_DIR` | No | Where the browser scripts find Playwright |
 

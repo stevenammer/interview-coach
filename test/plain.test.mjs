@@ -279,7 +279,13 @@ function fakeDoc() {
   return { createElement: make };
 }
 const storage = () => { const map = new Map(); return { map, getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) }; };
-const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+const settle = async (ready) => {
+  const deadline = Date.now() + 2000;
+  while (!ready()) {
+    assert.ok(Date.now() < deadline, 'Plain English UI did not reach its completed state');
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+};
 const part = (wrap, cls) => wrap.children.find((child) => child.className.split(' ').includes(cls));
 
 test('Plain English is OFF by default, remembered when turned on, and survives a reload', async () => {
@@ -307,13 +313,13 @@ test('per-turn button toggles original and plain, fetches once, and remembers', 
   const wrap = plain.plainSpan(QUESTION, 'question');
   const body = part(wrap, 'plain-text'); const button = part(wrap, 'plain-btn');
   assert.equal(body.textContent, QUESTION);
-  button.click(); await settle();
+  button.click(); await settle(() => !button.disabled);
   assert.equal(body.textContent, GOOD_QUESTION.replace(/^In plain words: /, ''));
   assert.equal(button.textContent, 'Show original');
-  button.click(); await settle();
+  button.click(); await settle(() => !button.disabled);
   assert.equal(body.textContent, QUESTION);
   assert.equal(button.textContent, 'Say it plain');
-  button.click(); await settle();
+  button.click(); await settle(() => !button.disabled);
   assert.equal(body.textContent, GOOD_QUESTION.replace(/^In plain words: /, ''));
   assert.equal(fetches, 1, 'second press uses the remembered result');
 });
@@ -325,21 +331,21 @@ test('global switch flips every message, shows the decoder hints on failure, and
   const a = plain.plainSpan('Question A', 'question');
   const b = plain.plainSpan('Debrief B', 'debrief');
   const c = plain.plainSpan('Fix the boom bottleneck', 'scenario');
-  plain.setOn(true); await settle();
+  plain.setOn(true); await settle(() => part(a, 'plain-text').textContent === 'plain Question A' && part(b, 'plain-text').textContent === 'plain Debrief B' && !part(c, 'plain-btn').disabled);
   assert.equal(part(a, 'plain-text').textContent, 'plain Question A');
   assert.equal(part(b, 'plain-text').textContent, 'plain Debrief B');
   assert.equal(part(c, 'plain-text').textContent, 'Fix the boom bottleneck', 'failure keeps the original');
   assert.match(part(c, 'plain-hints').textContent, /bottleneck/);
   assert.equal(part(a, 'plain-btn').textContent, 'Show original');
-  part(a, 'plain-btn').click(); await settle();
+  part(a, 'plain-btn').click(); await settle(() => part(a, 'plain-text').textContent === 'Question A');
   assert.equal(part(a, 'plain-text').textContent, 'Question A', 'per-message Show original works while on');
-  plain.setOn(false); await settle();
+  plain.setOn(false); await settle(() => part(b, 'plain-text').textContent === 'Debrief B');
   assert.equal(part(b, 'plain-text').textContent, 'Debrief B');
   assert.equal(part(c, 'plain-hints').hidden, true);
   assert.equal(part(b, 'plain-btn').textContent, 'Say it plain');
   // New messages render plain right away when the switch is on.
   plain.setOn(true);
-  const d = plain.plainSpan('Later turn', 'question'); await settle();
+  const d = plain.plainSpan('Later turn', 'question'); await settle(() => part(d, 'plain-text').textContent === 'plain Later turn');
   assert.equal(part(d, 'plain-text').textContent, 'plain Later turn');
 });
 
@@ -402,7 +408,7 @@ test('session clearing cancels queued translations and rejects late private cach
   const first = plain.translate('Private question A', 'question');
   const second = plain.translate('Private question B', 'question');
   const queued = plain.translate('Private question C', 'question');
-  await settle();
+  await settle(() => dispatched === 2);
   assert.equal(dispatched, 2);
   plain.clear();
   for (const resolve of waiting) resolve({ text: 'Private translated response', source: 'model', glossary: [] });

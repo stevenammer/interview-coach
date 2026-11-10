@@ -26,14 +26,18 @@ test('password changes revoke every other session but keep the current session',
   } finally { await db.close(); }
 });
 
-test('expired reservations release their hold and a reservation key is idempotent', async () => {
+test('uncertain reservations retain the original-day hold and reservation keys are idempotent', async () => {
   const { db, repo } = await database();
   try {
     const first = await repo.reserve('model', 60, 100, 'first', new Date('2026-01-01T00:00:00Z'));
     const same = await repo.reserve('model', 60, 100, 'first', new Date('2026-01-01T00:00:00Z'));
     assert.equal(same, first);
     const restored = await repo.reserve('voice', 100, 100, 'after-expiry', new Date('2026-01-01T00:16:00Z'));
-    assert.ok(restored, 'the default 15-minute hold expires when no settlement arrives');
+    assert.equal(restored, null, 'a timer cannot refund an uncertain request within its original day');
+    assert.equal(await repo.reserve('model', 60, 100, 'first', new Date('2026-01-01T00:17:00Z')), first);
+    assert.ok(await repo.reserve('model', 40, 100, 'remaining-budget', new Date('2026-01-01T00:18:00Z')));
+    const held = (await repo.sql('SELECT reserved_micros FROM spend_days WHERE utc_date=$1', ['2026-01-01']))[0];
+    assert.equal(Number(held.reserved_micros), 100);
     assert.ok(await repo.reserve('model', 100, 100, 'next-day', new Date('2026-01-02T00:00:00Z')));
   } finally { await db.close(); }
 });

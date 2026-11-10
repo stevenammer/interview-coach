@@ -29,18 +29,28 @@ test('IPv6 /64 and IPv4-mapped IPv4 addresses share abuse buckets', () => {
   assert.equal(abuseSubject(req, KEY, '::ffff:192.0.2.4'), abuseSubject(req, KEY, '192.0.2.4'));
 });
 
-test('live voice holds remain reserved for 120 minutes and late settlement records them', async () => {
+test('unknown model and voice holds survive expiry on their UTC day and settle once after rollover', async () => {
   const { db, repo } = await database();
   try {
     const owner = (await repo.createUser('voice_owner', 'hash')).id;
     const start = new Date('2026-01-01T00:00:00Z');
-    const reservation = await repo.reserve('voice', 60, 100, 'long-voice', start, owner, 100, { expiresMinutes: 120 });
-    assert.equal(await repo.reserve('model', 41, 100, 'after-16-minutes', new Date('2026-01-01T00:16:00Z')), null);
-    await repo.reserve('model', 1, 100, 'after-expiry', new Date('2026-01-01T02:01:00Z'));
-    await repo.settle(reservation, 60);
-    const day = (await repo.sql('SELECT reserved_micros,settled_micros FROM spend_days'))[0];
-    assert.equal(Number(day.reserved_micros), 1);
-    assert.equal(Number(day.settled_micros), 60);
+    const model = await repo.reserve('model', 30, 100, 'unknown-model', start, owner, 100);
+    const voice = await repo.reserve('voice', 60, 100, 'unknown-voice', start, owner, 100, { expiresMinutes: 120 });
+    assert.ok(model && voice);
+    assert.equal(await repo.reserve('model', 11, 100, 'same-day-blocked', new Date('2026-01-01T03:00:00Z')), null);
+    let rows = await repo.sql('SELECT state FROM spend_reservations ORDER BY bucket');
+    assert.deepEqual(rows.map((row) => row.state), ['reserved', 'reserved']);
+    assert.ok(await repo.reserve('model', 10, 100, 'next-day', new Date('2026-01-02T00:01:00Z')));
+    rows = await repo.sql('SELECT state FROM spend_reservations WHERE id IN ($1,$2) ORDER BY bucket', [model, voice]);
+    assert.deepEqual(rows.map((row) => row.state), ['expired', 'expired']);
+    await repo.settle(model, 20);
+    await repo.settle(voice, 40);
+    await repo.settle(voice, 40);
+    const days = await repo.sql('SELECT utc_date::text,reserved_micros,settled_micros FROM spend_days ORDER BY utc_date');
+    assert.equal(Number(days[0].reserved_micros), 0);
+    assert.equal(Number(days[0].settled_micros), 60);
+    assert.equal(Number(days[1].reserved_micros), 10);
+    assert.equal(Number(days[1].settled_micros), 0);
   } finally { await db.close(); }
 });
 
