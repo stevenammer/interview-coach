@@ -15,7 +15,7 @@ export async function applyPlainInterviewer(variables, plan, model) {
 }
 
 // Safety caps: signed-in 30 min per call, 90 min per day.
-const MAX_MINUTES = 30;
+const MAX_MINUTES = 10;
 const COST_MICROS_PER_MINUTE = 200_000;
 
 export function enabled(env, key) {
@@ -36,7 +36,7 @@ export async function startVoice({ repo, model, env, fetchImpl = fetch, plainMod
   if (!voiceConfigured(env)) throw new InputError('Voice practice is unavailable. Use text practice.', 503);
   const minutes = positiveNumber(env.VOICE_MAX_MINUTES, MAX_MINUTES);
   const limit = positiveNumber(env.VOICE_DAILY_MINUTES_LIMIT, 90);
-  const cap = positiveNumber(env.DAILY_USD_CAP, 15);
+  const cap = positiveNumber(env.DAILY_USD_CAP, 5);
   if (!minutes || !limit || !cap || !Number.isInteger(minutes) || !Number.isInteger(limit)) {
     throw new InputError('Voice spend limits are unavailable. Use text practice.', 503);
   }
@@ -204,7 +204,7 @@ export async function startGuestVoice({ repo, env, fetchImpl = fetch, plainModel
   if (!guestVoiceConfigured(env)) throw new InputError('Voice practice is unavailable. Use text practice.', 503);
   const { maxMinutes: minutes, callsPerDay: perBrowser } = guestVoiceLimits(env);
   const pool = positiveNumber(env.GUEST_VOICE_DAILY_MINUTES, 60);
-  const cap = positiveNumber(env.DAILY_USD_CAP, 15);
+  const cap = positiveNumber(env.DAILY_USD_CAP, 5);
   if (!minutes || !perBrowser || !pool || !cap) throw new InputError('Voice spend limits are unavailable. Use text practice.', 503);
   const workspace = await service.repo.workspace('guest', input.workspaceId);
   if (!workspace) throw new InputError('Workspace not found', 404);

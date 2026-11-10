@@ -72,6 +72,10 @@ export function parseStructured(raw, validate) {
   }
 }
 
+// The per-account share must be sized to this call, not to a 30 minute voice call, or a low
+// daily cap would let one account spend all of it.
+export const modelUserCapMicros = (capMicros, micros) => perUserDailyCapMicros(capMicros, micros);
+
 export class GeminiAdapter {
   constructor({ repo, fetchImpl = fetch, env = process.env } = {}) {
     this.repo = repo;
@@ -183,7 +187,7 @@ export class GeminiAdapter {
       error.code = 'model_unavailable';
       throw error;
     }
-    const cap = this.env.DAILY_USD_CAP === undefined ? 15 : Number(this.env.DAILY_USD_CAP);
+    const cap = this.env.DAILY_USD_CAP === undefined ? 5 : Number(this.env.DAILY_USD_CAP);
     if (!Number.isFinite(cap) || cap <= 0) {
       const error = new Error('Spend cap is invalid');
       error.code = 'spend_cap_reached';
@@ -216,7 +220,7 @@ export class GeminiAdapter {
     let reservation;
     try {
       const capMicros = Math.floor(cap * 1e6);
-      const userCapMicros = owner ? perUserDailyCapMicros(capMicros) : null;
+      const userCapMicros = owner ? modelUserCapMicros(capMicros, micros) : null;
       const fraction = this.env.GUEST_BUDGET_FRACTION === undefined ? 0.4 : Number(this.env.GUEST_BUDGET_FRACTION);
       const ipCap = this.env.GUEST_IP_DAILY_USD === undefined ? 3 : Number(this.env.GUEST_IP_DAILY_USD);
       if (options.guestSubject && (!Number.isFinite(fraction) || fraction < 0 || fraction > 1 ||

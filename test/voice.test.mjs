@@ -74,7 +74,7 @@ test('voice start binds owner and sends the exact prompt variable names', async 
       assert.match(body.retell_llm_dynamic_variables.job_summary, /Lead staffing/);
       assert.match(body.retell_llm_dynamic_variables.evidence_gaps, /staffing/);
       assert.equal(body.retell_llm_dynamic_variables.coach_notes, 'Let me finish before the next question.');
-      assert.equal(body.agent_override.agent.max_call_duration_ms, 1800000); // 30-minute cap for signed-in calls
+      assert.equal(body.agent_override.agent.max_call_duration_ms, 600000); // 10-minute default cap for signed-in calls, raised with VOICE_MAX_MINUTES
       return Response.json({ call_id: 'call-a', access_token: 'token-a', transport: 'gateway', ice_servers: [] });
     };
     const started = await startVoice({ repo, model, env, fetchImpl }, a.id, 'Alex', input(workspace));
@@ -106,7 +106,7 @@ test('default per-user budget permits one full voice reservation for each of two
     assert.equal(calls, 2);
     const reservations = await repo.sql(`SELECT user_id,estimated_micros FROM spend_reservations
       WHERE bucket='voice' ORDER BY user_id`);
-    assert.deepEqual(reservations.map((row) => Number(row.estimated_micros)), [6_000_000, 6_000_000]);
+    assert.deepEqual(reservations.map((row) => Number(row.estimated_micros)), [2_000_000, 2_000_000]);
     assert.deepEqual(new Set(reservations.map((row) => row.user_id)), new Set([a.id, b.id]));
   } finally { await db.close(); }
 });
@@ -119,7 +119,7 @@ test('voice create timeout retains caps, blocks a retry, and sends only bounded 
       domain: 'candidate', subject: 'candidate', predicate: 'did', value: { index },
       displayText: `fact ${index}`, quote: `fact ${index}`, sourceId: source.id, start: 0, end: 1,
       status: 'document', reviewState: index === 13 ? 'pending' : 'accepted', proposedBy: 'user' });
-    const tightEnv = { ...env, VOICE_DAILY_MINUTES_LIMIT: '30' };
+    const tightEnv = { ...env, VOICE_DAILY_MINUTES_LIMIT: '10' };
     await assert.rejects(startVoice({ repo, model, env: tightEnv, fetchImpl: async () => {
       throw new TypeError('network down');
     } }, a.id, 'Alex', input(workspace)), /network down/);
@@ -129,7 +129,7 @@ test('voice create timeout retains caps, blocks a retry, and sends only bounded 
     const held = await repo.sql("SELECT state,estimated_micros FROM spend_reservations WHERE bucket='voice'");
     assert.equal(held.length, 1);
     assert.equal(held[0].state, 'reserved');
-    assert.equal(Number(held[0].estimated_micros), 6_000_000);
+    assert.equal(Number(held[0].estimated_micros), 2_000_000);
     let variables;
     await startVoice({ repo, model, env: { ...env, DAILY_USD_CAP: '60' }, fetchImpl: async (_url, options) => {
       variables = JSON.parse(options.body).retell_llm_dynamic_variables;
@@ -215,7 +215,7 @@ test('ended-first transcript, cross-owner correction denial, and edited transcri
 test('voice create releases definitive rejection but retains ambiguous server failure', async () => {
   const { db, repo, a, workspace, model } = await setup();
   try {
-    const tightEnv = { ...env, VOICE_DAILY_MINUTES_LIMIT: '30' };
+    const tightEnv = { ...env, VOICE_DAILY_MINUTES_LIMIT: '10' };
     await assert.rejects(startVoice({ repo, model, env: tightEnv,
       fetchImpl: async () => new Response('rejected', { status: 400 }) }, a.id, 'Alex', input(workspace)), /Could not start/);
     let held = await repo.sql("SELECT state,actual_micros FROM spend_reservations WHERE bucket='voice'");
