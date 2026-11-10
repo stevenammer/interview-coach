@@ -1118,7 +1118,7 @@ details.career-case { border: 0; border-top: 1px solid #c9d6d9; border-radius: 0
   .app-layout { display: block; padding: 0; }
   .app-content .site-header, .app-content main, .app-content footer { padding-inline: 1rem; }
   #rail-toggle { display: inline-flex; }
-  #app-rail { position: fixed; z-index: 30; inset: .65rem auto .65rem .65rem; width: min(320px, calc(100vw - 1.3rem)); max-height: none; transform: translateX(calc(-100% - 1rem)); transition: transform .2s ease; background: rgba(252,251,255,.97); box-shadow: 0 18px 50px rgba(67,70,103,.28); }
+  #app-rail { position: fixed; z-index: 30; inset: .65rem auto .65rem .65rem; width: min(320px, calc(100vw - 1.3rem)); max-height: calc(100vh - 1.3rem); max-height: calc(100dvh - 1.3rem); overscroll-behavior-y: contain; transform: translateX(calc(-100% - 1rem)); transition: transform .2s ease; background: rgba(252,251,255,.97); box-shadow: 0 18px 50px rgba(67,70,103,.28); }
   #app-rail.is-open { transform: translateX(0); }
   .site-header { margin-top: .4rem; }
 }
