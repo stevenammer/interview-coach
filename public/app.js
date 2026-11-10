@@ -636,9 +636,9 @@ function identity() {
   const limits = guestVoiceLimits;
   const landingNote = $('guest-voice-limits');
   if (limits?.maxMinutes && limits?.callsPerDay) {
-    landingNote.textContent = `Guests can make ${limits.callsPerDay} voice call${limits.callsPerDay === 1 ? '' : 's'} a day, up to ${limits.maxMinutes} minute${limits.maxMinutes === 1 ? '' : 's'} each. Typing has no limit.`;
+    landingNote.textContent = `Guests can make ${limits.callsPerDay} voice call${limits.callsPerDay === 1 ? '' : 's'} a day, up to ${limits.maxMinutes} minute${limits.maxMinutes === 1 ? '' : 's'} each. Text practice is subject to daily usage limits.`;
     landingNote.hidden = false;
-    $('voice-guest-note').textContent = `Voice calls for guests run up to ${limits.maxMinutes} minutes, ${limits.callsPerDay} time${limits.callsPerDay === 1 ? '' : 's'} a day. Your transcript comes back to this browser and we don't save it. Retell, the voice company, keeps a copy for a day.`;
+    $('voice-guest-note').textContent = `Voice calls for guests run up to ${limits.maxMinutes} minutes, ${limits.callsPerDay} time${limits.callsPerDay === 1 ? '' : 's'} a day. Your transcript comes back to this browser and we don't save it. Retell processes the audio and transcript under its own retention settings.`;
   }
 }
 
@@ -2018,8 +2018,8 @@ function stopVoice() {
 
 $('start-voice').addEventListener('click', (event) => run(event.currentTarget, async () => {
   const limit = `up to ${guest ? guestVoiceLimits?.maxMinutes ?? 5 : 30} minutes`;
-  const privacy = guest ? ' Retell keeps a copy for one day.' : '';
-  if (!window.confirm(`Start a live voice mock interview? This uses a paid call for ${limit}.${privacy} Choose Cancel to use text practice.`)) return;
+  const privacy = guest ? ' Retell processes audio and transcripts under its own retention settings.' : '';
+  if (!window.confirm(`Start a live voice mock interview? This uses a metered voice service for ${limit}; the app does not ask you for payment.${privacy} Choose Cancel to use text practice.`)) return;
   const voiceEpoch = sessionEpoch;
   let stream;
   try {

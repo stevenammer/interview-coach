@@ -67,11 +67,13 @@ Open http://localhost:8888. Data is kept in `./data/pglite`. Use `DEV_DB=memory 
 
 ## Deploy on Netlify
 
-1. Create a Netlify site from your copy of this repo and add a Netlify Database. Migrations in `netlify/database/migrations` are applied on deploy.
+1. Create a Netlify site from your copy of this repo and add a Netlify Database. The build prepares `netlify/database/migrations` in `.netlify/runtime-migrations` for Netlify's native migration step before publication.
 2. Set the environment variables below in the site settings.
 3. Deploy with the Netlify CLI or your usual workflow. Read the Netlify docs for current steps; this README doesn't pin them.
 
 Deployed sites require `VERTEX_API_KEY` (the code refuses to fall back to another provider on Netlify). `GEMINI_API_KEY` works for local use.
+
+For an existing database that already applied `023_spend_guard_subject.sql` with the same SQL as canonical `024_spend_guard_subject.sql`, set the build environment variable `IC_MIGRATION_HISTORY=legacy-spend-23`. This prepares the already-applied SQL under its historical name and puts the resource guard at 024. New databases should leave the variable unset. Verify the actual migration history and target database before deployment, including previews. Never edit applied migration SQL.
 
 ## Configuration
 

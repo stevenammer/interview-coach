@@ -1,6 +1,10 @@
 [build]
   publish = "public"
   functions = "netlify/functions"
+  command = "node scripts/prepare-netlify-migrations.mjs"
+
+[database.migrations]
+  path = ".netlify/runtime-migrations"
 
 [[redirects]]
   from = "/api"

@@ -46,7 +46,8 @@ test('guest voice copy gets its limits from the same configuration as enforcemen
     { maxMinutes: 7, callsPerDay: 3 });
   const [api, app] = await Promise.all([file('netlify/functions/api.mjs'), file('public/app.js')]);
   assert.match(api, /guestVoiceLimits: guestVoiceLimits\(env\)/);
-  assert.match(app, /Typing has no limit\./);
+  assert.match(app, /Text practice is subject to daily usage limits\./);
+  assert.doesNotMatch(app, /Typing has no limit/);
 });
 
 test('a shortened user-facing job label ends with an ellipsis', async () => {
