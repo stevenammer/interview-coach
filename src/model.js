@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { perUserDailyCapMicros } from './repository.js';
+import { DEFAULT_DAILY_USD_CAP } from './spend-limits.js';
 
 // Vertex AI when VERTEX_API_KEY is set;
 // Netlify deployments require Vertex. Local tools may use the Gemini Developer API.
@@ -187,7 +188,7 @@ export class GeminiAdapter {
       error.code = 'model_unavailable';
       throw error;
     }
-    const cap = this.env.DAILY_USD_CAP === undefined ? 5 : Number(this.env.DAILY_USD_CAP);
+    const cap = this.env.DAILY_USD_CAP === undefined ? DEFAULT_DAILY_USD_CAP : Number(this.env.DAILY_USD_CAP);
     if (!Number.isFinite(cap) || cap <= 0) {
       const error = new Error('Spend cap is invalid');
       error.code = 'spend_cap_reached';

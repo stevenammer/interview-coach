@@ -4,7 +4,7 @@ Interview Coach ships with strict defaults. Raise any of them with the environme
 
 | Control | Environment variable | Default | At the limit |
 | --- | --- | --- | --- |
-| Entire model and voice ledger | `DAILY_USD_CAP` | `5` | New reservations return 503. Existing reservations can still settle. |
+| Entire model and voice ledger | `DAILY_USD_CAP` | `15` | New reservations return 503. Existing reservations can still settle. |
 | Signed-in share of the daily ledger | none | 50% of the daily cap, with room for one full voice reservation | New signed-in model or voice reservations return 503. |
 | Guest share of the daily ledger | `GUEST_BUDGET_FRACTION` | `0.4` | Guest model and voice reservations return 503. |
 | Guest IP daily ledger | `GUEST_IP_DAILY_USD` | `3.00` | Guest model and voice reservations from that IP bucket return 503. IPv6 uses a /64 bucket. |
@@ -27,7 +27,7 @@ The ledger uses UTC calendar days. The code stores only HMACs of abuse subjects,
 
 ## Defaults at a glance
 
-The daily ledger is `$5` (`DAILY_USD_CAP`). Guests may use 40% of it, which is `$2.00`, so about two 5-minute guest voice calls a day in total, or a lot of text practice. A signed-in voice call is 10 minutes (`VOICE_MAX_MINUTES`) and reserves `$2.00` at `$0.20` a minute. Each account is held to half of the cap. If you raise the cap, raise `VOICE_MAX_MINUTES` with it.
+The daily ledger is `$15` (`DAILY_USD_CAP`). Guests may use 40% of it, which is `$6.00`, so about six 5-minute guest voice calls a day in total, or a lot of text practice. A 5-minute guest voice call reserves `$1.00` at `$0.20` a minute. The fixed `$3.00` guest-IP ledger therefore permits up to three such calls from one IP bucket. A signed-in voice call is 10 minutes (`VOICE_MAX_MINUTES`) and reserves `$2.00` at `$0.20` a minute. Each signed-in account is held to half of the cap, `$7.50`, which permits about three such calls before its spend share is exhausted. The 60-minute guest pool and 90-minute signed-in voice limit still apply.
 
 ## Provider controls
 

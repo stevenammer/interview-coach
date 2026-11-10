@@ -15,16 +15,16 @@ test('the voice-sized minimum no longer hands one account the whole cap', () => 
   assert.notEqual(modelUserCapMicros(5_000_000, 250_000), perUserDailyCapMicros(5_000_000));
 });
 
-test('the adapter passes a half-of-cap account limit to the ledger at a $5 cap', async () => {
+test('the adapter uses the $15 default and passes its half-of-cap account limit to the ledger', async () => {
   const seen = [];
   const repo = {
     async reserve(task, micros, cap, key, now, owner, userCap) { seen.push({ cap, owner, userCap }); return 'r1'; },
     async settle() {},
   };
-  const env = { GEMINI_API_KEY: 'key', DAILY_USD_CAP: '5' };
+  const env = { GEMINI_API_KEY: 'key' };
   const body = { candidates: [{ content: { parts: [{ text: '{}' }] } }], usageMetadata: {} };
   const adapter = new GeminiAdapter({ repo, env, fetchImpl: async () => new Response(JSON.stringify(body)) });
   await adapter.call('gemini-3.8-flash', 'test', 'hello', null, undefined, 'user-1');
-  assert.equal(seen[0].cap, 5_000_000);
-  assert.equal(seen[0].userCap, 2_500_000);
+  assert.equal(seen[0].cap, 15_000_000);
+  assert.equal(seen[0].userCap, 7_500_000);
 });

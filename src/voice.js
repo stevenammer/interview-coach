@@ -3,6 +3,7 @@ import { CoachService, InputError } from './service.js';
 import { hash, perUserDailyCapMicros } from './repository.js';
 import { PLAIN_INTERVIEWER_INSTRUCTION, plainQuestionPlan } from './plain.js';
 import { retellConnection } from './retell-connection.js';
+import { DEFAULT_DAILY_USD_CAP } from './spend-limits.js';
 
 // "Plain English interviewer" (off unless the caller asks). Retell's per-call overrides can't
 // replace the agent's prompt, so the instruction rides in a dynamic variable the prompt
@@ -36,7 +37,7 @@ export async function startVoice({ repo, model, env, fetchImpl = fetch, plainMod
   if (!voiceConfigured(env)) throw new InputError('Voice practice is unavailable. Use text practice.', 503);
   const minutes = positiveNumber(env.VOICE_MAX_MINUTES, MAX_MINUTES);
   const limit = positiveNumber(env.VOICE_DAILY_MINUTES_LIMIT, 90);
-  const cap = positiveNumber(env.DAILY_USD_CAP, 5);
+  const cap = positiveNumber(env.DAILY_USD_CAP, DEFAULT_DAILY_USD_CAP);
   if (!minutes || !limit || !cap || !Number.isInteger(minutes) || !Number.isInteger(limit)) {
     throw new InputError('Voice spend limits are unavailable. Use text practice.', 503);
   }
@@ -204,7 +205,7 @@ export async function startGuestVoice({ repo, env, fetchImpl = fetch, plainModel
   if (!guestVoiceConfigured(env)) throw new InputError('Voice practice is unavailable. Use text practice.', 503);
   const { maxMinutes: minutes, callsPerDay: perBrowser } = guestVoiceLimits(env);
   const pool = positiveNumber(env.GUEST_VOICE_DAILY_MINUTES, 60);
-  const cap = positiveNumber(env.DAILY_USD_CAP, 5);
+  const cap = positiveNumber(env.DAILY_USD_CAP, DEFAULT_DAILY_USD_CAP);
   if (!minutes || !perBrowser || !pool || !cap) throw new InputError('Voice spend limits are unavailable. Use text practice.', 503);
   const workspace = await service.repo.workspace('guest', input.workspaceId);
   if (!workspace) throw new InputError('Workspace not found', 404);
